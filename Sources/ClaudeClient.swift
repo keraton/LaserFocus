@@ -24,13 +24,24 @@ enum Keychain {
 
     static var hasAPIKey: Bool { !(apiKey ?? "").isEmpty }
 
+    /// Saves (or, with nil, removes) the key. Returns nil on success, else a description of the failure.
     @discardableResult
-    static func setAPIKey(_ key: String?) -> Bool {
-        SecItemDelete(query as CFDictionary)
-        guard let key = key?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else { return true }
+    static func setAPIKey(_ key: String?) -> String? {
+        let deleted = SecItemDelete(query as CFDictionary)
+        guard let key = key?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else {
+            return deleted == errSecSuccess || deleted == errSecItemNotFound ? nil : message(for: deleted)
+        }
         var item = query
         item[kSecValueData as String] = Data(key.utf8)
-        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+        let status = SecItemAdd(item as CFDictionary, nil)
+        guard status == errSecSuccess else { return message(for: status) }
+        // Read it back: a write the app can't read later is as good as no write.
+        return apiKey == key ? nil : "The key was written but could not be read back from the Keychain."
+    }
+
+    private static func message(for status: OSStatus) -> String {
+        let text = (SecCopyErrorMessageString(status, nil) as String?) ?? "Unknown error"
+        return "\(text) (OSStatus \(status))"
     }
 }
 
@@ -62,8 +73,9 @@ final class ClaudeClient {
 
     /// Sends one Messages API request. `completion` is called on the main queue.
     func send(system: String, messages: [[String: Any]], tools: [[String: Any]], effort: String,
-              completion: @escaping (Result<ClaudeReply, Error>) -> Void) {
+              useFallbacks: Bool = true, completion: @escaping (Result<ClaudeReply, Error>) -> Void) {
         guard let key = Keychain.apiKey, !key.isEmpty else {
+            CoachLog.write("No API key found in the Keychain")
             completion(.failure(ClaudeError.missingKey))
             return
         }
@@ -74,9 +86,11 @@ final class ClaudeClient {
             "system": system,
             "messages": messages,
             "output_config": ["effort": effort],
-            // If a safety classifier declines, let the API retry on a suitable fallback model.
-            "fallbacks": "default",
         ]
+        if useFallbacks {
+            // If a safety classifier declines, let the API retry on a suitable fallback model.
+            body["fallbacks"] = "default"
+        }
         if !tools.isEmpty {
             body["tools"] = tools
             body["tool_choice"] = ["type": "auto"]
@@ -88,7 +102,9 @@ final class ClaudeClient {
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.setValue(key, forHTTPHeaderField: "x-api-key")
         request.setValue("2026-10-21", forHTTPHeaderField: "anthropic-version")
-        request.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
+        if useFallbacks {
+            request.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
+        }
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         } catch {
@@ -98,7 +114,20 @@ final class ClaudeClient {
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             let result = Self.parse(data: data, response: response, error: error)
-            DispatchQueue.main.async { completion(result) }
+            DispatchQueue.main.async {
+                // Fallbacks are an optional safety net: if this account or API rejects them, retry without.
+                if useFallbacks, case .failure(ClaudeError.http(400, let message)) = result,
+                   message.lowercased().contains("fallback") || message.lowercased().contains("beta") {
+                    CoachLog.write("Retrying without fallbacks after: \(message)")
+                    self.send(system: system, messages: messages, tools: tools, effort: effort,
+                              useFallbacks: false, completion: completion)
+                    return
+                }
+                if case .failure(let error) = result {
+                    CoachLog.write("Request failed: \(error.localizedDescription)")
+                }
+                completion(result)
+            }
         }.resume()
     }
 
@@ -132,5 +161,26 @@ final class ClaudeClient {
         }
         reply.text = reply.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return .success(reply)
+    }
+}
+
+/// Coach diagnostics in ~/Library/Logs/LaserFocus/coach.log. Never contains the API key or document text.
+enum CoachLog {
+    static let url: URL = {
+        let logs = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Logs/LaserFocus", isDirectory: true)
+        try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+        return logs.appendingPathComponent("coach.log")
+    }()
+
+    static func write(_ message: String) {
+        let line = "\(ISO8601DateFormatter().string(from: Date()))  \(message)\n"
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            handle.closeFile()
+        } else {
+            try? Data(line.utf8).write(to: url)
+        }
     }
 }

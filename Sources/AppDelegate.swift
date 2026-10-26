@@ -72,15 +72,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if Keychain.hasAPIKey { alert.addButton(withTitle: "Remove Key") }
         alert.window.initialFirstResponder = field
 
+        let failure: String?
         switch alert.runModal() {
-        case .alertFirstButtonReturn where !field.stringValue.isEmpty:
-            Keychain.setAPIKey(field.stringValue)
+        case .alertFirstButtonReturn:
+            let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else {
+                showKeyResult("No key was entered", "The field was empty, so nothing was saved. Paste your key (⌘V) into the field and click Save.")
+                return
+            }
+            failure = Keychain.setAPIKey(key)
+            CoachLog.write(failure.map { "API key save failed: \($0)" } ?? "API key saved (\(key.count) characters)")
+            if let failure = failure {
+                showKeyResult("The key could not be saved", failure)
+            } else {
+                showKeyResult("API key saved", "The coach is ready. Click \"Plan my writing\" to start.")
+            }
         case .alertThirdButtonReturn:
-            Keychain.setAPIKey(nil)
+            failure = Keychain.setAPIKey(nil)
+            if let failure = failure { showKeyResult("The key could not be removed", failure) }
         default:
             return
         }
         NotificationCenter.default.post(name: .settingsChanged, object: nil)
+    }
+
+    private func showKeyResult(_ title: String, _ detail: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        alert.runModal()
     }
 
     @objc func toggleTypewriter(_ sender: Any?) {

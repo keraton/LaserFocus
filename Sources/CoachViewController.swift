@@ -58,6 +58,7 @@ final class CoachViewController: NSViewController, NSTextFieldDelegate {
 
         thinkingLabel.font = NSFont.systemFont(ofSize: 11)
         errorLabel.isEditable = false
+        errorLabel.isSelectable = true
         errorLabel.isBordered = false
         errorLabel.drawsBackground = false
         errorLabel.font = NSFont.systemFont(ofSize: 11)
