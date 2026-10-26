@@ -18,6 +18,8 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     var onTextChange: (() -> Void)?
     /// Called with the caret location whenever the selection moves.
     var onCaretMove: ((Int) -> Void)?
+    /// Called for each edit the writer makes, with the characters inserted and deleted.
+    var onEdit: ((Int, Int) -> Void)?
 
     var caretLocation: Int { textView.selectedRange().location }
 
@@ -308,6 +310,11 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     }
 
     // MARK: NSTextViewDelegate
+
+    func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
+        onEdit?((replacementString as NSString?)?.length ?? 0, range.length)
+        return true
+    }
 
     func textViewDidChangeSelection(_ notification: Notification) {
         updateFocus()

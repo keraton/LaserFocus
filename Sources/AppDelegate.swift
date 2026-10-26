@@ -57,6 +57,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    @objc func toggleCoachNudges(_ sender: Any?) { settings.coachNudges.toggle() }
+    @objc func toggleCoachSharesText(_ sender: Any?) { settings.coachSharesText.toggle() }
+
+    @objc func setAPIKey(_ sender: Any?) {
+        let alert = NSAlert()
+        alert.messageText = "Anthropic API Key"
+        alert.informativeText = "The writing coach is powered by Claude. Paste an API key from console.anthropic.com. It is stored in your Mac's Keychain and only sent to Anthropic."
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        field.placeholderString = Keychain.hasAPIKey ? "A key is saved — paste a new one to replace it" : "sk-ant-…"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        if Keychain.hasAPIKey { alert.addButton(withTitle: "Remove Key") }
+        alert.window.initialFirstResponder = field
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn where !field.stringValue.isEmpty:
+            Keychain.setAPIKey(field.stringValue)
+        case .alertThirdButtonReturn:
+            Keychain.setAPIKey(nil)
+        default:
+            return
+        }
+        NotificationCenter.default.post(name: .settingsChanged, object: nil)
+    }
+
     @objc func toggleTypewriter(_ sender: Any?) {
         settings.typewriter.toggle()
     }
@@ -83,6 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Annotations: select text and press ⌥⌘A (or right-click ▸ Add Annotation) to attach a note without changing your text. ⌃⌘A shows all notes. Notes are saved invisibly at the end of the .md file.
 
+        Coach (⌃⌘K): a Claude-powered coach on the right. Click "Plan my writing" to get a schedule you approve or change; it then reminds you every time you open the document and nudges you when you pause mid-sentence, keep rewriting, or go idle. Needs an Anthropic API key (Coach menu).
+
         Grammar colors (⌥⌘G) estimate subject, predicate, object and modifiers using macOS's language tagger.
         """
         alert.runModal()
@@ -104,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.state = settings.showSidebar && settings.sidebarTab == .outline ? .on : .off
         case #selector(toggleNotes(_:)):
             item.state = settings.showSidebar && settings.sidebarTab == .notes ? .on : .off
+        case #selector(toggleCoachNudges(_:)):
+            item.state = settings.coachNudges ? .on : .off
+        case #selector(toggleCoachSharesText(_:)):
+            item.state = settings.coachSharesText ? .on : .off
         case #selector(toggleTypewriter(_:)):
             item.state = settings.typewriter ? .on : .off
         case #selector(setFontStyle(_:)):
@@ -122,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         main.addItem(submenu(fileMenu()))
         main.addItem(submenu(editMenu()))
         main.addItem(submenu(viewMenu()))
+        main.addItem(submenu(coachMenu()))
         let window = windowMenu()
         main.addItem(submenu(window))
         NSApp.windowsMenu = window
@@ -260,6 +293,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menu.addItem(submenu(font, title: "Font"))
         menu.addItem(.separator())
         menu.addItem(item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]))
+        return menu
+    }
+
+    private func coachMenu() -> NSMenu {
+        let menu = NSMenu(title: "Coach")
+        menu.addItem(item("Show Coach", #selector(DocumentViewController.toggleCoach(_:)), "k", [.command, .control]))
+        menu.addItem(item("Plan My Writing…", #selector(DocumentViewController.planWriting(_:)), "p", [.command, .control]))
+        menu.addItem(item("Message Coach", #selector(DocumentViewController.messageCoach(_:)), "m", [.command, .control]))
+        menu.addItem(.separator())
+        menu.addItem(item("Nudge Me When I'm Stuck", #selector(toggleCoachNudges(_:)), ""))
+        menu.addItem(item("Share Current Paragraph With Coach", #selector(toggleCoachSharesText(_:)), ""))
+        menu.addItem(.separator())
+        menu.addItem(item("Anthropic API Key…", #selector(setAPIKey(_:)), ""))
         return menu
     }
 

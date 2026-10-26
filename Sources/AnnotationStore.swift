@@ -26,16 +26,11 @@ extension Notification.Name {
 }
 
 /// Annotations for one document. They are kept out of the editable text and saved in a
-/// hidden HTML comment block at the end of the Markdown file, so they travel with it
-/// and are invisible in any Markdown viewer.
+/// `HiddenBlock` at the end of the Markdown file, so they travel with it.
 final class AnnotationStore {
     private(set) var items: [Annotation] = []
     /// Called whenever the user changes annotations, so the document can be marked edited.
     var onUserChange: (() -> Void)?
-
-    private static let blockStart = "<!-- laserfocus:annotations"
-    private static let blockRegex = try! NSRegularExpression(
-        pattern: "\\n<!-- laserfocus:annotations\\n([\\s\\S]*?)\\n-->\\n?\\z")
 
     // MARK: Editing
 
@@ -97,15 +92,8 @@ final class AnnotationStore {
 
     /// Splits a file into its visible text and loads the annotations stored in it.
     func load(fromFile fileText: String) -> String {
-        let ns = fileText as NSString
-        guard let match = Self.blockRegex.firstMatch(in: fileText, range: NSRange(location: 0, length: ns.length)) else {
-            items = []
-            NotificationCenter.default.post(name: .annotationsChanged, object: self)
-            return fileText
-        }
-        let body = ns.substring(to: match.range.location)
-        let json = ns.substring(with: match.range(at: 1))
-        let decoded = (try? JSONDecoder().decode([Annotation].self, from: Data(json.utf8))) ?? []
+        let (body, json) = HiddenBlock.extract("annotations", from: fileText)
+        let decoded = json.flatMap { try? JSONDecoder().decode([Annotation].self, from: Data($0.utf8)) } ?? []
         items = decoded.map { reattach($0, in: body as NSString) }
         sort()
         NotificationCenter.default.post(name: .annotationsChanged, object: self)
@@ -121,14 +109,13 @@ final class AnnotationStore {
         guard !items.isEmpty else { return body }
 
         let encoder = JSONEncoder()
-        if #available(macOS 10.13, *) { encoder.outputFormatting = [.sortedKeys] }
+        encoder.outputFormatting = [.sortedKeys]
+        // One annotation per line keeps diffs of the file readable.
         let lines = items.compactMap { item -> String? in
-            guard let data = try? encoder.encode(item), let line = String(data: data, encoding: .utf8) else { return nil }
-            // "-->" would end the HTML comment early; it can only appear inside JSON strings.
-            return line.replacingOccurrences(of: "-->", with: "--\\u003e")
+            guard let data = try? encoder.encode(item) else { return nil }
+            return String(data: data, encoding: .utf8)
         }
-        let separator = body.hasSuffix("\n") ? "" : "\n"
-        return body + separator + "\n" + Self.blockStart + "\n[\n" + lines.joined(separator: ",\n") + "\n]\n-->\n"
+        return HiddenBlock.append("annotations", contents: "[\n" + lines.joined(separator: ",\n") + "\n]", to: body)
     }
 
     /// Makes sure a loaded annotation still points at its anchor text, searching for the

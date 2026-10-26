@@ -26,9 +26,46 @@ The Swift runtime is bundled inside the app so it also runs on macOS versions ol
 | Grammar colors | ⌥⌘G colors subject, predicate (verbs), object and modifiers |
 | Outline sidebar | ⌃⌘S or View ▸ Show Outline shows the heading hierarchy on the left. Click a heading to jump to it. The section you're in is highlighted |
 | Annotations | Select text and press ⌥⌘A (or right-click ▸ Add Annotation) to attach a note without changing your text. With nothing selected, the current sentence is annotated. Notes appear as cards in the sidebar's **Notes** tab (⌃⌘A). Click a card to jump to its text. Annotated text is highlighted and stays attached while you edit |
+| Writing coach | A Claude-powered coach on the right (⌃⌘K). See below |
 | Typewriter scrolling | ⌥⌘T keeps the current line centered |
 | Fonts | View ▸ Font: Serif, Sans, Mono. ⌘= / ⌘- change the size |
 | Saving | Standard macOS document behaviour: Save, Duplicate, Rename, Move To, Revert / browse versions, autosave, Open Recent |
+
+### Writing coach
+
+The coach panel on the right helps you keep writing:
+
+1. **Plan.** Click **Plan my writing** (⌃⌘P). The coach asks a few questions, one at a
+   time: what you're writing, how long it should be, your deadline, and when you can write.
+   It then proposes a plan as a card, for example "about 300 words every weekday until
+   15 March", with milestones. Click **Approve**, or **Request changes** and say what
+   should change.
+2. **Reminders.** Every time you open the document, the coach recaps today's goal and
+   whether you're on track or behind. The top of the panel shows today's progress and
+   overall progress.
+3. **Nudges.** LaserFocus watches your typing rhythm on your Mac and only asks Claude for a
+   message when you seem stuck:
+   - you pause mid-sentence for about 90 seconds
+   - you delete and retype a lot within a minute and a half
+   - you go idle for 4 minutes
+
+   When you're stuck on a word, the coach can suggest alternatives. Nudges are at most one
+   every 8 minutes and can be turned off in the Coach menu. The coach also celebrates when
+   you reach today's goal.
+4. **Chat.** Message the coach at any time (⌃⌘M). Asking it to change the plan works too.
+
+**Setup:** Coach ▸ Anthropic API Key… lets you paste a key from
+[console.anthropic.com](https://console.anthropic.com). The key is stored in the macOS
+Keychain and is only sent to Anthropic. The coach uses `claude-opus-5-5`.
+
+**Privacy:** the coach sends Claude your plan, progress numbers and the conversation.
+With **Coach ▸ Share Current Paragraph With Coach** on (the default), it also sends the
+paragraph you're working on, and the opening of the document while planning. Turn it off
+to share numbers only. Without an API key, reminders and nudges fall back to built-in
+messages.
+
+The plan, daily progress and conversation are saved in the document, in the same kind of
+hidden block as annotations (`<!-- laserfocus:coach … -->`).
 
 ### How annotations are saved
 
@@ -73,6 +110,11 @@ Sources/
   OutlineViewController.swift heading hierarchy
   AnnotationsViewController.swift annotation cards
   AnnotationStore.swift      annotation model, anchoring and file storage
+  HiddenBlock.swift          hidden data blocks at the end of the .md file, word/paragraph counts
+  CoachViewController.swift  coach panel: progress, chat, plan cards
+  WritingCoach.swift         coach logic: planning, plan status, stuck detection, prompts
+  CoachStore.swift           plan / progress / chat model saved in the document
+  ClaudeClient.swift         Claude Messages API client and Keychain key storage
   EditorViewController.swift text column, focus dimming, typewriter mode, status line
   FocusTextView.swift        inline autocomplete
   MarkdownStyler.swift       Markdown and grammar highlighting

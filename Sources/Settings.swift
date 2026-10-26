@@ -60,6 +60,9 @@ final class Settings {
             "typewriter": false,
             "showOutline": false,
             "sidebarTab": SidebarTab.outline.rawValue,
+            "showCoach": true,
+            "coachNudges": true,
+            "coachSharesText": true,
             "fontStyle": FontStyle.serif.rawValue,
             "fontSize": 18.0,
         ])
@@ -107,6 +110,23 @@ final class Settings {
     var sidebarTab: SidebarTab {
         get { SidebarTab(rawValue: defaults.string(forKey: "sidebarTab") ?? "") ?? .outline }
         set { defaults.set(newValue.rawValue, forKey: "sidebarTab"); changed() }
+    }
+
+    /// Whether new windows open with the coach panel.
+    var showCoach: Bool {
+        get { defaults.bool(forKey: "showCoach") }
+        set { defaults.set(newValue, forKey: "showCoach"); changed() }
+    }
+
+    var coachNudges: Bool {
+        get { defaults.bool(forKey: "coachNudges") }
+        set { defaults.set(newValue, forKey: "coachNudges"); changed() }
+    }
+
+    /// Whether the coach may send the current paragraph (and the document's opening while planning) to Claude.
+    var coachSharesText: Bool {
+        get { defaults.bool(forKey: "coachSharesText") }
+        set { defaults.set(newValue, forKey: "coachSharesText"); changed() }
     }
 
     var fontStyle: FontStyle {
