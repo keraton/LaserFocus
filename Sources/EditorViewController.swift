@@ -10,6 +10,9 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     private let settings = Settings.shared
     private let maxColumnWidth: CGFloat = 720
     private var wordCount = 0
+    private let annotations: AnnotationStore
+    /// True while the whole text is replaced programmatically, so anchors aren't collapsed.
+    private var isReplacingText = false
 
     /// Called after the text changes (for the outline sidebar).
     var onTextChange: (() -> Void)?
@@ -18,7 +21,8 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
 
     var caretLocation: Int { textView.selectedRange().location }
 
-    init(text: String) {
+    init(text: String, annotations: AnnotationStore) {
+        self.annotations = annotations
         let storage = NSTextStorage(string: text)
         let layoutManager = NSLayoutManager()
         storage.addLayoutManager(layoutManager)
@@ -28,6 +32,8 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
         textView = FocusTextView(frame: .zero, textContainer: container)
         super.init(nibName: nil, bundle: nil)
         storage.delegate = self
+        NotificationCenter.default.addObserver(self, selector: #selector(annotationsChanged),
+                                               name: .annotationsChanged, object: annotations)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -39,23 +45,27 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     var text: String {
         get { textView.string }
         set {
+            isReplacingText = true
             textView.string = newValue
+            isReplacingText = false
             restyleAll()
             updateWordCount()
             onTextChange?()
         }
     }
 
-    /// Moves the caret to `location` and scrolls that line near the top of the view.
-    func reveal(location: Int) {
+    /// Selects `range` and scrolls its line near the top of the view.
+    func reveal(range: NSRange) {
         let ns = textView.string as NSString
-        let target = NSRange(location: min(location, ns.length), length: 0)
+        let start = min(range.location, ns.length)
+        let target = NSRange(location: start, length: min(range.length, ns.length - start))
         view.window?.makeFirstResponder(textView)
         textView.setSelectedRange(target)
         guard !settings.typewriter,
               let layoutManager = textView.layoutManager,
               let container = textView.textContainer else { return }
-        let glyphs = layoutManager.glyphRange(forCharacterRange: target, actualCharacterRange: nil)
+        let glyphs = layoutManager.glyphRange(forCharacterRange: NSRange(location: target.location, length: 0),
+                                              actualCharacterRange: nil)
         let rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: container)
         let y = rect.minY + textView.textContainerOrigin.y - 60
         let maxY = max(0, textView.frame.height - scrollView.contentSize.height)
@@ -188,6 +198,9 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     func textStorage(_ textStorage: NSTextStorage, willProcessEditing editedMask: NSTextStorageEditActions,
                      range editedRange: NSRange, changeInLength delta: Int) {
         guard editedMask.contains(.editedCharacters) else { return }
+        if !isReplacingText {
+            annotations.adjust(editedRange: editedRange, delta: delta)
+        }
         let ns = textStorage.string as NSString
         var range = ns.paragraphRange(for: editedRange)
         // Small documents are cheap to restyle entirely; also needed when a code fence changes.
@@ -240,17 +253,42 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
         let all = NSRange(location: 0, length: length)
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: all)
         layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: all)
-        guard let focus = focusRange() else { return }
-
         let palette = settings.palette
-        let attributes: [NSAttributedString.Key: Any] = [
-            .foregroundColor: settings.focusStyle == .hide ? palette.background : palette.dimmed,
-            .backgroundColor: palette.background,
-        ]
-        let before = NSRange(location: 0, length: focus.location)
-        let after = NSRange(location: NSMaxRange(focus), length: length - NSMaxRange(focus))
-        if before.length > 0 { layoutManager.addTemporaryAttributes(attributes, forCharacterRange: before) }
-        if after.length > 0 { layoutManager.addTemporaryAttributes(attributes, forCharacterRange: after) }
+        let focus = focusRange() ?? all
+
+        if focus != all {
+            let attributes: [NSAttributedString.Key: Any] = [
+                .foregroundColor: settings.focusStyle == .hide ? palette.background : palette.dimmed,
+                .backgroundColor: palette.background,
+            ]
+            let before = NSRange(location: 0, length: focus.location)
+            let after = NSRange(location: NSMaxRange(focus), length: length - NSMaxRange(focus))
+            if before.length > 0 { layoutManager.addTemporaryAttributes(attributes, forCharacterRange: before) }
+            if after.length > 0 { layoutManager.addTemporaryAttributes(attributes, forCharacterRange: after) }
+        }
+
+        // Annotated text: highlighted in focus, a faint trace where the text is dimmed.
+        let active = annotations.annotation(at: caretLocation)
+        for annotation in annotations.items where annotation.length > 0 && NSMaxRange(annotation.range) <= length {
+            let strength: CGFloat = annotation === active ? 0.5 : 0.25
+            let inFocus = NSIntersectionRange(annotation.range, focus)
+            if inFocus.length > 0 {
+                layoutManager.addTemporaryAttribute(.backgroundColor,
+                                                    value: palette.annotation.withAlphaComponent(strength),
+                                                    forCharacterRange: inFocus)
+            }
+            for outside in [NSRange(location: annotation.location, length: max(0, min(NSMaxRange(annotation.range), focus.location) - annotation.location)),
+                            NSRange(location: max(annotation.location, NSMaxRange(focus)), length: max(0, NSMaxRange(annotation.range) - max(annotation.location, NSMaxRange(focus))))]
+                where outside.length > 0 && settings.focusStyle == .dim {
+                layoutManager.addTemporaryAttribute(.backgroundColor,
+                                                    value: palette.annotation.withAlphaComponent(0.1),
+                                                    forCharacterRange: outside)
+            }
+        }
+    }
+
+    @objc private func annotationsChanged() {
+        updateFocus()
     }
 
     // MARK: Typewriter scrolling

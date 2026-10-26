@@ -31,6 +31,10 @@ enum FocusStyle: Int {
     case dim = 0, hide
 }
 
+enum SidebarTab: String {
+    case outline, notes
+}
+
 enum FontStyle: String {
     case serif, sans, mono
 }
@@ -55,6 +59,7 @@ final class Settings {
             "autocomplete": true,
             "typewriter": false,
             "showOutline": false,
+            "sidebarTab": SidebarTab.outline.rawValue,
             "fontStyle": FontStyle.serif.rawValue,
             "fontSize": 18.0,
         ])
@@ -94,9 +99,14 @@ final class Settings {
         set { defaults.set(newValue, forKey: "typewriter"); changed() }
     }
 
-    var showOutline: Bool {
+    var showSidebar: Bool {
         get { defaults.bool(forKey: "showOutline") }
         set { defaults.set(newValue, forKey: "showOutline"); changed() }
+    }
+
+    var sidebarTab: SidebarTab {
+        get { SidebarTab(rawValue: defaults.string(forKey: "sidebarTab") ?? "") ?? .outline }
+        set { defaults.set(newValue.rawValue, forKey: "sidebarTab"); changed() }
     }
 
     var fontStyle: FontStyle {
@@ -165,6 +175,7 @@ struct Palette {
     let predicate: NSColor
     let object: NSColor
     let modifier: NSColor
+    let annotation: NSColor
 
     var dimmed: NSColor { text.withAlphaComponent(0.18) }
     var ghost: NSColor { text.withAlphaComponent(0.35) }
@@ -181,7 +192,8 @@ struct Palette {
         subject: NSColor(hex: 0x1F62C4),
         predicate: NSColor(hex: 0xC8323E),
         object: NSColor(hex: 0x1E8A5A),
-        modifier: NSColor(hex: 0x8A4FC4)
+        modifier: NSColor(hex: 0x8A4FC4),
+        annotation: NSColor(hex: 0xF2B705)
     )
 
     static let dark = Palette(
@@ -196,6 +208,7 @@ struct Palette {
         subject: NSColor(hex: 0x6CA8FF),
         predicate: NSColor(hex: 0xFF7A7F),
         object: NSColor(hex: 0x5CD49A),
-        modifier: NSColor(hex: 0xC59BFF)
+        modifier: NSColor(hex: 0xC59BFF),
+        annotation: NSColor(hex: 0xE5B53A)
     )
 }

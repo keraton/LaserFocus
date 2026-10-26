@@ -44,8 +44,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         settings.autocomplete.toggle()
     }
 
-    @objc func toggleOutline(_ sender: Any?) {
-        settings.showOutline.toggle()
+    @objc func toggleOutline(_ sender: Any?) { toggleSidebar(.outline) }
+    @objc func toggleNotes(_ sender: Any?) { toggleSidebar(.notes) }
+
+    /// Shows the sidebar on `tab`, or hides it if it is already showing that tab.
+    private func toggleSidebar(_ tab: SidebarTab) {
+        if settings.showSidebar && settings.sidebarTab == tab {
+            settings.showSidebar = false
+        } else {
+            settings.sidebarTab = tab
+            settings.showSidebar = true
+        }
     }
 
     @objc func toggleTypewriter(_ sender: Any?) {
@@ -72,6 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Outline (⌃⌘S): shows the heading hierarchy in a sidebar. Click a heading to jump to it.
 
+        Annotations: select text and press ⌥⌘A (or right-click ▸ Add Annotation) to attach a note without changing your text. ⌃⌘A shows all notes. Notes are saved invisibly at the end of the .md file.
+
         Grammar colors (⌥⌘G) estimate subject, predicate, object and modifiers using macOS's language tagger.
         """
         alert.runModal()
@@ -90,7 +101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case #selector(toggleAutocomplete(_:)):
             item.state = settings.autocomplete ? .on : .off
         case #selector(toggleOutline(_:)):
-            item.state = settings.showOutline ? .on : .off
+            item.state = settings.showSidebar && settings.sidebarTab == .outline ? .on : .off
+        case #selector(toggleNotes(_:)):
+            item.state = settings.showSidebar && settings.sidebarTab == .notes ? .on : .off
         case #selector(toggleTypewriter(_:)):
             item.state = settings.typewriter ? .on : .off
         case #selector(setFontStyle(_:)):
@@ -204,6 +217,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menu.addItem(submenu(substitutions, title: "Substitutions"))
 
         menu.addItem(.separator())
+        menu.addItem(item("Add Annotation", #selector(DocumentViewController.addAnnotation(_:)), "a", [.command, .option]))
+        menu.addItem(.separator())
         menu.addItem(item("Autocomplete While Typing", #selector(toggleAutocomplete(_:)), ""))
         menu.addItem(item("Show Completions", #selector(NSTextView.complete(_:)), "\u{1b}", [.option]))
         return menu
@@ -213,6 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let menu = NSMenu(title: "View")
 
         menu.addItem(item("Show Outline", #selector(toggleOutline(_:)), "s", [.command, .control]))
+        menu.addItem(item("Show Annotations", #selector(toggleNotes(_:)), "a", [.command, .control]))
         menu.addItem(.separator())
 
         let theme = NSMenu(title: "Theme")

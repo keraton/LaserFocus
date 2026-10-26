@@ -109,6 +109,17 @@ final class FocusTextView: NSTextView {
         return available.first { $0.hasPrefix(detected + "_") || $0.hasPrefix(detected + "-") }
     }
 
+    // MARK: Context menu
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        let annotate = NSMenuItem(title: "Add Annotation",
+                                  action: #selector(DocumentViewController.addAnnotation(_:)), keyEquivalent: "")
+        menu.insertItem(annotate, at: 0)
+        menu.insertItem(.separator(), at: 1)
+        return menu
+    }
+
     // MARK: Drawing
 
     override func draw(_ dirtyRect: NSRect) {
