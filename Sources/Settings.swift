@@ -35,6 +35,14 @@ enum SidebarTab: String {
     case outline, notes
 }
 
+/// How the coach reaches Claude.
+enum CoachBackend: String {
+    /// Claude Code on this Mac, signed in with the writer's Claude subscription.
+    case claudeCode
+    /// The Claude API with the writer's own API key (billed separately).
+    case api
+}
+
 enum FontStyle: String {
     case serif, sans, mono
 }
@@ -63,6 +71,7 @@ final class Settings {
             "showCoach": true,
             "coachNudges": true,
             "coachSharesText": true,
+            "coachBackend": CoachBackend.claudeCode.rawValue,
             "fontStyle": FontStyle.serif.rawValue,
             "fontSize": 18.0,
         ])
@@ -127,6 +136,11 @@ final class Settings {
     var coachSharesText: Bool {
         get { defaults.bool(forKey: "coachSharesText") }
         set { defaults.set(newValue, forKey: "coachSharesText"); changed() }
+    }
+
+    var coachBackend: CoachBackend {
+        get { CoachBackend(rawValue: defaults.string(forKey: "coachBackend") ?? "") ?? .claudeCode }
+        set { defaults.set(newValue.rawValue, forKey: "coachBackend"); changed() }
     }
 
     var fontStyle: FontStyle {

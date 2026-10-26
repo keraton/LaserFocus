@@ -142,6 +142,12 @@ final class CoachViewController: NSViewController, NSTextFieldDelegate {
         view.window?.makeFirstResponder(input)
     }
 
+    @objc private func copySignInCommand() {
+        guard let binary = ClaudeCodeClient.locate() else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(ClaudeCodeClient.signInCommand(for: binary), forType: .string)
+    }
+
     @objc private func addAPIKey() {
         NSApp.sendAction(#selector(AppDelegate.setAPIKey(_:)), to: nil, from: self)
     }
@@ -171,9 +177,17 @@ final class CoachViewController: NSViewController, NSTextFieldDelegate {
         summaryBox.arrangedSubviews.forEach { $0.removeFromSuperview() }
         summaryBox.layer?.backgroundColor = palette.background.cgColor
 
-        if !Keychain.hasAPIKey {
+        switch settings.coachBackend {
+        case .api where !Keychain.hasAPIKey:
             summaryBox.addArrangedSubview(label("The coach uses Claude. Add your Anthropic API key to plan and chat.", size: 12, color: palette.muted))
             summaryBox.addArrangedSubview(button("Add API Key…", #selector(addAPIKey)))
+        case .claudeCode where ClaudeCodeClient.locate() == nil:
+            summaryBox.addArrangedSubview(label("The coach runs on your Claude subscription through Claude Code, which wasn't found on this Mac.", size: 12, color: palette.muted))
+        case .claudeCode where coach.needsClaudeCodeSignIn:
+            summaryBox.addArrangedSubview(label("Sign Claude Code in to your Claude account once: paste the command into Terminal, press Return and sign in in your browser.", size: 12, color: palette.muted))
+            summaryBox.addArrangedSubview(button("Copy Sign-In Command", #selector(copySignInCommand)))
+        default:
+            break
         }
 
         guard let plan = coach.store.data.plan, let status = coach.status() else {

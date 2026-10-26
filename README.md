@@ -54,9 +54,21 @@ The coach panel on the right helps you keep writing:
    you reach today's goal.
 4. **Chat.** Message the coach at any time (⌃⌘M). Asking it to change the plan works too.
 
-**Setup:** Coach ▸ Anthropic API Key… lets you paste a key from
-[console.anthropic.com](https://console.anthropic.com). The key is stored in the macOS
-Keychain and is only sent to Anthropic. The coach uses `claude-opus-5-5`.
+**Setup:** the coach can reach Claude in two ways (Coach menu):
+
+- **Use Claude Subscription (via Claude Code)** is the default and costs nothing extra.
+  LaserFocus runs Claude Code headlessly on your Mac, using your Claude plan's usage
+  limits. It uses an installed `claude` CLI if there is one, otherwise the copy bundled
+  with the Claude desktop app. Sign it in once: when the coach asks, click
+  **Copy Sign-In Command**, paste it into Terminal, press Return and sign in in your browser.
+  If you have the CLI installed, `claude auth login --claudeai` does the same. Replies use
+  your Claude Code default model.
+- **Use Anthropic API Key** uses the Claude API, billed separately per use. Paste a key
+  from [console.anthropic.com](https://console.anthropic.com) in Coach ▸ Anthropic API Key….
+  The key is stored in the macOS Keychain and only sent to Anthropic. This mode uses
+  `claude-opus-5-5`.
+
+Problems are logged to `~/Library/Logs/LaserFocus/coach.log`, without keys or text.
 
 **Privacy:** the coach sends Claude your plan, progress numbers and the conversation.
 With **Coach ▸ Share Current Paragraph With Coach** on (the default), it also sends the
@@ -114,7 +126,8 @@ Sources/
   CoachViewController.swift  coach panel: progress, chat, plan cards
   WritingCoach.swift         coach logic: planning, plan status, stuck detection, prompts
   CoachStore.swift           plan / progress / chat model saved in the document
-  ClaudeClient.swift         Claude Messages API client and Keychain key storage
+  ClaudeClient.swift         Claude Messages API client, Keychain key storage, coach log
+  ClaudeCodeClient.swift     runs the coach through Claude Code on your Claude subscription
   EditorViewController.swift text column, focus dimming, typewriter mode, status line
   FocusTextView.swift        inline autocomplete
   MarkdownStyler.swift       Markdown and grammar highlighting

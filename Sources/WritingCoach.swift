@@ -49,6 +49,7 @@ final class WritingCoach {
     private(set) var lastError: String? { didSet { notify() } }
 
     private let client = ClaudeClient()
+    private let claudeCode = ClaudeCodeClient()
     private let settings = Settings.shared
     private var timer: Timer?
     private var edits: [(date: Date, inserted: Int, deleted: Int)] = []
@@ -204,7 +205,7 @@ final class WritingCoach {
     private func converse(effort: String, fallback: String?) {
         isThinking = true
         lastError = nil
-        client.send(system: systemPrompt(), messages: apiMessages(), tools: [Self.proposePlanTool], effort: effort) { [weak self] result in
+        let completion: (Result<ClaudeReply, Error>) -> Void = { [weak self] result in
             guard let self = self else { return }
             self.isThinking = false
             switch result {
@@ -214,14 +215,35 @@ final class WritingCoach {
                 if let fallback = fallback {
                     self.store.update(markEdited: false) { $0.chat.append(ChatEntry(role: .assistant, text: fallback)) }
                 }
-                // Without an API key, automatic messages quietly use the local fallback.
-                var missingKey = false
-                if case ClaudeError.missingKey? = error as? ClaudeError { missingKey = true }
-                if !(missingKey && fallback != nil) {
+                // Until the coach is set up, automatic messages quietly use the local fallback.
+                if !(Self.isSetupProblem(error) && fallback != nil) {
                     self.lastError = error.localizedDescription
                 }
             }
         }
+
+        switch settings.coachBackend {
+        case .claudeCode:
+            claudeCode.send(system: systemPrompt(), prompt: transcriptPrompt(), schema: Self.replySchema,
+                            effort: effort, completion: completion)
+        case .api:
+            client.send(system: systemPrompt(), messages: apiMessages(), tools: [Self.proposePlanTool],
+                        effort: effort, completion: completion)
+        }
+    }
+
+    /// Errors that mean the coach isn't connected yet, rather than that a request failed.
+    static func isSetupProblem(_ error: Error) -> Bool {
+        switch error {
+        case ClaudeError.missingKey, ClaudeCodeError.notFound, ClaudeCodeError.notSignedIn: return true
+        default: return false
+        }
+    }
+
+    /// True when the last failure was Claude Code needing a sign-in; the panel offers the command.
+    var needsClaudeCodeSignIn: Bool {
+        guard let binary = ClaudeCodeClient.locate(), let error = lastError else { return false }
+        return error.contains(ClaudeCodeClient.signInCommand(for: binary))
     }
 
     private func handle(_ reply: ClaudeReply) {
@@ -259,11 +281,39 @@ final class WritingCoach {
         return turns.map { ["role": $0.role, "content": $0.text] }
     }
 
+    /// Claude Code takes a single prompt, so the conversation is written out as a transcript.
+    private func transcriptPrompt() -> String {
+        let lines = apiMessages().map { turn -> String in
+            let speaker = turn["role"] as? String == "assistant" ? "Coach" : "Writer"
+            return "\(speaker): \(turn["content"] as? String ?? "")"
+        }
+        return "Conversation so far (Writer is the person writing, Coach is you):\n\n"
+            + lines.joined(separator: "\n\n")
+            + "\n\nReply as the Coach to the Writer's last message."
+    }
+
     // MARK: Prompt
 
     private func systemPrompt() -> String {
-        return Self.instructions + "\n\n<context>\n" + context() + "\n</context>"
+        let planning = settings.coachBackend == .api ? Self.toolPlanning : Self.structuredPlanning
+        return Self.instructions.replacingOccurrences(of: "{PLAN_DELIVERY}", with: planning)
+            + "\n\n<context>\n" + context() + "\n</context>"
     }
+
+    private static let toolPlanning = """
+    Then call the propose_plan tool with a realistic plan. Express targets in words, or in paragraphs if the \
+    writer thinks in paragraphs. Milestones are cumulative totals. Don't also restate the plan in prose; the \
+    app shows it as a card with Approve and Request changes buttons. If they ask for changes, call \
+    propose_plan again with the revised plan. Use the propose_plan tool only for proposing or revising a plan.
+    """
+
+    private static let structuredPlanning = """
+    Your reply is JSON: what you say to the writer goes in "message". When you propose a plan, put it in \
+    "plan" and keep "message" to one short sentence introducing it; leave "plan" out otherwise. Express \
+    targets in words, or in paragraphs if the writer thinks in paragraphs. Milestones are cumulative totals. \
+    Don't restate the plan in "message"; the app shows it as a card with Approve and Request changes \
+    buttons. If they ask for changes, send the revised plan in "plan" again.
+    """
 
     private static let instructions = """
     You are the writing coach inside LaserFocus, a distraction-free Markdown writing app for macOS. \
@@ -271,11 +321,7 @@ final class WritingCoach {
 
     Planning: when the writer asks for a plan or wants to change one, interview them briefly. \
     Ask one question at a time, four or five at most in total: what they are writing and for whom, \
-    how long it should be, the deadline, and when and how often they can write. Then call the \
-    propose_plan tool with a realistic plan. Express targets in words, or in paragraphs if the writer \
-    thinks in paragraphs. Milestones are cumulative totals. Don't also restate the plan in prose; the app \
-    shows it as a card with Approve and Request changes buttons. If they ask for changes, call \
-    propose_plan again with the revised plan. Use the propose_plan tool only for proposing or revising a plan.
+    how long it should be, the deadline, and when and how often they can write. {PLAN_DELIVERY}
 
     Coaching: once a plan is approved, help the writer keep to it. Remind them of today's goal, \
     encourage them when they are stuck, and celebrate progress. Be specific to their project and the \
@@ -322,6 +368,19 @@ final class WritingCoach {
             lines.append("The writer has chosen not to share their text with the coach.")
         }
         return lines.joined(separator: "\n\n")
+    }
+
+    /// Reply format for Claude Code: a message, plus a plan when one is proposed.
+    private static var replySchema: [String: Any] {
+        [
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["message"],
+            "properties": [
+                "message": ["type": "string", "description": "What the coach says to the writer."],
+                "plan": proposePlanTool["input_schema"]!,
+            ],
+        ]
     }
 
     private static let proposePlanTool: [String: Any] = [

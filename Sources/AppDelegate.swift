@@ -57,6 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    @objc func setCoachBackend(_ sender: NSMenuItem) {
+        settings.coachBackend = sender.tag == 1 ? .api : .claudeCode
+    }
+
     @objc func toggleCoachNudges(_ sender: Any?) { settings.coachNudges.toggle() }
     @objc func toggleCoachSharesText(_ sender: Any?) { settings.coachSharesText.toggle() }
 
@@ -129,7 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Annotations: select text and press ⌥⌘A (or right-click ▸ Add Annotation) to attach a note without changing your text. ⌃⌘A shows all notes. Notes are saved invisibly at the end of the .md file.
 
-        Coach (⌃⌘K): a Claude-powered coach on the right. Click "Plan my writing" to get a schedule you approve or change; it then reminds you every time you open the document and nudges you when you pause mid-sentence, keep rewriting, or go idle. Needs an Anthropic API key (Coach menu).
+        Coach (⌃⌘K): a Claude-powered coach on the right. Click "Plan my writing" to get a schedule you approve or change; it then reminds you every time you open the document and nudges you when you pause mid-sentence, keep rewriting, or go idle. Runs on your Claude subscription through Claude Code (sign in once), or on an Anthropic API key (Coach menu).
 
         Grammar colors (⌥⌘G) estimate subject, predicate, object and modifiers using macOS's language tagger.
         """
@@ -152,6 +156,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.state = settings.showSidebar && settings.sidebarTab == .outline ? .on : .off
         case #selector(toggleNotes(_:)):
             item.state = settings.showSidebar && settings.sidebarTab == .notes ? .on : .off
+        case #selector(setCoachBackend(_:)):
+            item.state = (item.tag == 1 ? CoachBackend.api : .claudeCode) == settings.coachBackend ? .on : .off
         case #selector(toggleCoachNudges(_:)):
             item.state = settings.coachNudges ? .on : .off
         case #selector(toggleCoachSharesText(_:)):
@@ -325,6 +331,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menu.addItem(item("Nudge Me When I'm Stuck", #selector(toggleCoachNudges(_:)), ""))
         menu.addItem(item("Share Current Paragraph With Coach", #selector(toggleCoachSharesText(_:)), ""))
         menu.addItem(.separator())
+        menu.addItem(item("Use Claude Subscription (via Claude Code)", #selector(setCoachBackend(_:)), "", tag: 0))
+        menu.addItem(item("Use Anthropic API Key", #selector(setCoachBackend(_:)), "", tag: 1))
         menu.addItem(item("Anthropic API Key…", #selector(setAPIKey(_:)), ""))
         return menu
     }
