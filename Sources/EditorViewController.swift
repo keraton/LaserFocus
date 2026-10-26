@@ -11,6 +11,13 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     private let maxColumnWidth: CGFloat = 720
     private var wordCount = 0
 
+    /// Called after the text changes (for the outline sidebar).
+    var onTextChange: (() -> Void)?
+    /// Called with the caret location whenever the selection moves.
+    var onCaretMove: ((Int) -> Void)?
+
+    var caretLocation: Int { textView.selectedRange().location }
+
     init(text: String) {
         let storage = NSTextStorage(string: text)
         let layoutManager = NSLayoutManager()
@@ -35,7 +42,25 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
             textView.string = newValue
             restyleAll()
             updateWordCount()
+            onTextChange?()
         }
+    }
+
+    /// Moves the caret to `location` and scrolls that line near the top of the view.
+    func reveal(location: Int) {
+        let ns = textView.string as NSString
+        let target = NSRange(location: min(location, ns.length), length: 0)
+        view.window?.makeFirstResponder(textView)
+        textView.setSelectedRange(target)
+        guard !settings.typewriter,
+              let layoutManager = textView.layoutManager,
+              let container = textView.textContainer else { return }
+        let glyphs = layoutManager.glyphRange(forCharacterRange: target, actualCharacterRange: nil)
+        let rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: container)
+        let y = rect.minY + textView.textContainerOrigin.y - 60
+        let maxY = max(0, textView.frame.height - scrollView.contentSize.height)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(max(0, y), maxY)))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     // MARK: View setup
@@ -248,6 +273,7 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
 
     func textViewDidChangeSelection(_ notification: Notification) {
         updateFocus()
+        onCaretMove?(caretLocation)
         if settings.typewriter {
             // Run after NSTextView's own scroll-to-caret so ours wins.
             DispatchQueue.main.async { [weak self] in self?.centerCaret() }
@@ -256,6 +282,7 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
 
     func textDidChange(_ notification: Notification) {
         updateFocus()
+        onTextChange?()
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(updateWordCount), object: nil)
         perform(#selector(updateWordCount), with: nil, afterDelay: 0.4)
     }

@@ -44,6 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         settings.autocomplete.toggle()
     }
 
+    @objc func toggleOutline(_ sender: Any?) {
+        settings.showOutline.toggle()
+    }
+
     @objc func toggleTypewriter(_ sender: Any?) {
         settings.typewriter.toggle()
     }
@@ -66,6 +70,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Autocomplete: suggestions appear faintly after the caret. Press Tab to accept, Esc to dismiss, ⌥Esc for the full list. The language follows what you write; manage dictionaries in Edit ▸ Spelling and Grammar.
 
+        Outline (⌃⌘S): shows the heading hierarchy in a sidebar. Click a heading to jump to it.
+
         Grammar colors (⌥⌘G) estimate subject, predicate, object and modifiers using macOS's language tagger.
         """
         alert.runModal()
@@ -83,6 +89,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.state = settings.grammarColors ? .on : .off
         case #selector(toggleAutocomplete(_:)):
             item.state = settings.autocomplete ? .on : .off
+        case #selector(toggleOutline(_:)):
+            item.state = settings.showOutline ? .on : .off
         case #selector(toggleTypewriter(_:)):
             item.state = settings.typewriter ? .on : .off
         case #selector(setFontStyle(_:)):
@@ -203,6 +211,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func viewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
+
+        menu.addItem(item("Show Outline", #selector(toggleOutline(_:)), "s", [.command, .control]))
+        menu.addItem(.separator())
 
         let theme = NSMenu(title: "Theme")
         theme.addItem(item("Light", #selector(setTheme(_:)), "", tag: 0))

@@ -54,6 +54,7 @@ final class Settings {
             "grammarColors": false,
             "autocomplete": true,
             "typewriter": false,
+            "showOutline": false,
             "fontStyle": FontStyle.serif.rawValue,
             "fontSize": 18.0,
         ])
@@ -91,6 +92,11 @@ final class Settings {
     var typewriter: Bool {
         get { defaults.bool(forKey: "typewriter") }
         set { defaults.set(newValue, forKey: "typewriter"); changed() }
+    }
+
+    var showOutline: Bool {
+        get { defaults.bool(forKey: "showOutline") }
+        set { defaults.set(newValue, forKey: "showOutline"); changed() }
     }
 
     var fontStyle: FontStyle {
@@ -148,6 +154,7 @@ extension NSColor {
 
 struct Palette {
     let background: NSColor
+    let sidebar: NSColor
     let text: NSColor
     let muted: NSColor
     let accent: NSColor
@@ -164,6 +171,7 @@ struct Palette {
 
     static let light = Palette(
         background: NSColor(hex: 0xFAF9F6),
+        sidebar: NSColor(hex: 0xF0EEE9),
         text: NSColor(hex: 0x2B2B2B),
         muted: NSColor(hex: 0x9A9A9A),
         accent: NSColor(hex: 0x1A7FD4),
@@ -178,6 +186,7 @@ struct Palette {
 
     static let dark = Palette(
         background: NSColor(hex: 0x1C1D20),
+        sidebar: NSColor(hex: 0x161719),
         text: NSColor(hex: 0xDCDCDC),
         muted: NSColor(hex: 0x6F7277),
         accent: NSColor(hex: 0x5AB0F5),

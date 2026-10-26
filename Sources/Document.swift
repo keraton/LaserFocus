@@ -13,13 +13,13 @@ final class Document: NSDocument {
         let editor = EditorViewController(text: loadedText)
         self.editor = editor
 
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 720),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.minSize = NSSize(width: 420, height: 300)
-        window.contentViewController = editor
-        window.setContentSize(NSSize(width: 900, height: 720))
+        window.contentViewController = DocumentViewController(editor: editor)
+        window.setContentSize(NSSize(width: 1000, height: 720))
         window.center()
 
         let controller = NSWindowController(window: window)

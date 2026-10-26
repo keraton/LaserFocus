@@ -24,6 +24,7 @@ The Swift runtime is bundled inside the app so it also runs on macOS versions ol
 | Markdown | Live styling of headings, bold, italic, code, code blocks, quotes, lists, links, strikethrough. Files are saved as plain `.md` |
 | Autocomplete | Suggestions from the macOS spell checker appear faintly after the caret. **Tab** accepts, **Esc** dismisses, **⌥Esc** shows the full list. The language is detected per paragraph, and any language with a macOS dictionary works |
 | Grammar colors | ⌥⌘G colors subject, predicate (verbs), object and modifiers |
+| Outline sidebar | ⌃⌘S or View ▸ Show Outline shows the heading hierarchy on the left. Click a heading to jump to it. The section you're in is highlighted |
 | Typewriter scrolling | ⌥⌘T keeps the current line centered |
 | Fonts | View ▸ Font: Serif, Sans, Mono. ⌘= / ⌘- change the size |
 | Saving | Standard macOS document behaviour: Save, Duplicate, Rename, Move To, Revert / browse versions, autosave, Open Recent |
@@ -49,6 +50,8 @@ Sources/
   main.swift                 app entry point
   AppDelegate.swift          menus and preference actions
   Document.swift             NSDocument: load and save .md / .txt
+  DocumentViewController.swift split view: outline sidebar + editor
+  OutlineViewController.swift heading hierarchy sidebar
   EditorViewController.swift text column, focus dimming, typewriter mode, status line
   FocusTextView.swift        inline autocomplete
   MarkdownStyler.swift       Markdown and grammar highlighting
