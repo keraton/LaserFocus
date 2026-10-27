@@ -11,7 +11,18 @@ final class FocusTextView: NSTextView {
 
     private var suggestion: String?
     private var suggestionLocation = NSNotFound
-    private let languageTagger = NSLinguisticTagger(tagSchemes: [.language], options: 0)
+    private var dictionaryObserver: NSObjectProtocol?
+
+    deinit {
+        if let observer = dictionaryObserver { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard dictionaryObserver == nil else { return }
+        dictionaryObserver = NotificationCenter.default.addObserver(
+            forName: .customDictionaryChanged, object: nil, queue: .main) { [weak self] _ in self?.recheckSpelling() }
+    }
 
     // MARK: Suggestion lifecycle
 
@@ -101,23 +112,128 @@ final class FocusTextView: NSTextView {
     private func language(around location: Int) -> String? {
         let ns = string as NSString
         let paragraph = ns.paragraphRange(for: NSRange(location: min(location, ns.length), length: 0))
-        guard paragraph.length > 8 else { return nil }
-        languageTagger.string = ns.substring(with: paragraph)
-        guard let detected = languageTagger.dominantLanguage, detected != "und" else { return nil }
+        guard paragraph.length > 8,
+              let detected = LanguageDetector.language(of: ns.substring(with: paragraph)) else { return nil }
         let available = NSSpellChecker.shared.availableLanguages
         if available.contains(detected) { return detected }
         return available.first { $0.hasPrefix(detected + "_") || $0.hasPrefix(detected + "-") }
+    }
+
+    // MARK: Spelling
+
+    /// Indonesian paragraphs get their spelling marks from ``IndonesianSpellChecker``.
+    override func handleTextCheckingResults(_ results: [NSTextCheckingResult], forRange range: NSRange,
+                                            types checkingTypes: NSTextCheckingTypes,
+                                            options: [NSSpellChecker.OptionKey: Any] = [:],
+                                            orthography: NSOrthography, wordCount: Int) {
+        var results = results
+        if checkingTypes & NSTextCheckingResult.CheckingType.spelling.rawValue != 0 {
+            let caret = selectedRange()
+            results = IndonesianSpellChecker.shared.adjust(results, in: string, range: range,
+                                                           documentTag: spellCheckerDocumentTag,
+                                                           skipping: caret.length == 0 ? caret : nil)
+        }
+        super.handleTextCheckingResults(results, forRange: range, types: checkingTypes, options: options,
+                                        orthography: orthography, wordCount: wordCount)
+    }
+
+    /// Re-marks misspellings everywhere, e.g. after a word was added to the dictionary.
+    func recheckSpelling() {
+        guard isContinuousSpellCheckingEnabled else { return }
+        let all = NSRange(location: 0, length: (string as NSString).length)
+        layoutManager?.removeTemporaryAttribute(.spellingState, forCharacterRange: all)
+        checkText(in: all, types: NSTextCheckingResult.CheckingType.spelling.rawValue, options: [:])
+    }
+
+    /// The word at a character index, if it's marked as misspelled.
+    private func misspelledWord(at index: Int) -> NSRange? {
+        let ns = string as NSString
+        guard index < ns.length, let layoutManager = layoutManager else { return nil }
+        var marked = NSRange(location: 0, length: 0)
+        guard layoutManager.temporaryAttribute(.spellingState, atCharacterIndex: index,
+                                               effectiveRange: &marked) != nil else { return nil }
+        let paragraph = ns.paragraphRange(for: NSRange(location: index, length: 0))
+        return Indonesian.wordRanges(in: string, range: paragraph).first { NSLocationInRange(index, $0.1) }?.1
+    }
+
+    @objc private func replaceMisspelling(_ sender: NSMenuItem) {
+        guard let range = (sender.representedObject as? NSValue)?.rangeValue,
+              shouldChangeText(in: range, replacementString: sender.title) else { return }
+        replaceCharacters(in: range, with: sender.title)
+        didChangeText()
+    }
+
+    @objc private func addToDictionary(_ sender: NSMenuItem) {
+        guard let word = sender.representedObject as? String else { return }
+        CustomDictionary.shared.add(word)
     }
 
     // MARK: Context menu
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
+        var position = 0
+        func insert(_ item: NSMenuItem) {
+            menu.insertItem(item, at: position)
+            position += 1
+        }
+
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        if let range = misspelledWord(at: index) {
+            let ns = string as NSString
+            let word = ns.substring(with: range)
+            if Indonesian.looksIndonesian(ns.substring(with: ns.paragraphRange(for: range))) {
+                // The system's guesses for these words come from the wrong language.
+                removeSystemGuesses(from: menu)
+                let guesses = IndonesianSpellChecker.shared.guesses(for: word, in: string, range: range,
+                                                                    documentTag: spellCheckerDocumentTag)
+                for guess in guesses {
+                    let item = NSMenuItem(title: guess, action: #selector(replaceMisspelling(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = NSValue(range: range)
+                    insert(item)
+                }
+                if guesses.isEmpty {
+                    let none = NSMenuItem(title: "No Guesses Found", action: nil, keyEquivalent: "")
+                    none.isEnabled = false
+                    insert(none)
+                }
+                insert(.separator())
+            } else {
+                // Keep AppKit's guesses first, as in every Mac app.
+                while position < menu.items.count, isSystemGuess(menu.items[position]) { position += 1 }
+                if position > 0 {
+                    if position < menu.items.count, menu.items[position].isSeparatorItem { position += 1 } else { insert(.separator()) }
+                }
+            }
+            // "Add to Dictionary" replaces Learn Spelling, so the word shows up in Custom Dictionary.
+            if let learn = menu.items.firstIndex(where: { $0.action.map(NSStringFromSelector) == "_learnSpellingFromMenu:" }) {
+                menu.removeItem(at: learn)
+            }
+            let add = NSMenuItem(title: "Add “\(word)” to Dictionary", action: #selector(addToDictionary(_:)), keyEquivalent: "")
+            add.target = self
+            add.representedObject = word
+            insert(add)
+            insert(.separator())
+        }
+
         let annotate = NSMenuItem(title: "Add Annotation",
                                   action: #selector(DocumentViewController.addAnnotation(_:)), keyEquivalent: "")
-        menu.insertItem(annotate, at: 0)
-        menu.insertItem(.separator(), at: 1)
+        insert(annotate)
+        insert(.separator())
         return menu
+    }
+
+    /// Drops the guess items AppKit puts at the top of the menu for a misspelled word.
+    private func removeSystemGuesses(from menu: NSMenu) {
+        guard let first = menu.items.first, isSystemGuess(first) else { return }
+        while let first = menu.items.first, isSystemGuess(first) { menu.removeItem(at: 0) }
+        if menu.items.first?.isSeparatorItem == true { menu.removeItem(at: 0) }
+    }
+
+    private func isSystemGuess(_ item: NSMenuItem) -> Bool {
+        if item.action.map(NSStringFromSelector) == "_changeSpellingFromMenu:" { return true }
+        return item.action == nil && !item.isSeparatorItem && item.submenu == nil && !item.isEnabled   // "No Guesses Found"
     }
 
     // MARK: Drawing

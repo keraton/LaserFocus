@@ -119,6 +119,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc func smallerText(_ sender: Any?) { settings.fontSize -= 1 }
     @objc func defaultTextSize(_ sender: Any?) { settings.fontSize = 18 }
 
+    @objc func showCustomDictionary(_ sender: Any?) {
+        CustomDictionaryWindowController.shared.showWindow(sender)
+    }
+
     @objc func showMarkdownHelp(_ sender: Any?) {
         let alert = NSAlert()
         alert.messageText = "LaserFocus Quick Reference"
@@ -127,7 +131,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Focus: ⌘0 off, ⌘1 sentence, ⌘2 / ⌘3 / ⌘4 one, two or three paragraphs. ⇧⌘D switches between dimming and hiding the rest.
 
-        Autocomplete: suggestions appear faintly after the caret. Press Tab to accept, Esc to dismiss, ⌥Esc for the full list. The language follows what you write; manage dictionaries in Edit ▸ Spelling and Grammar.
+        Autocomplete: suggestions appear faintly after the caret. Press Tab to accept, Esc to dismiss, ⌥Esc for the full list. The language follows what you write, Indonesian included; manage dictionaries in Edit ▸ Spelling and Grammar.
+
+        Typos: misspelled words are underlined, in Indonesian too. Right-click one for corrections or to add it to your dictionary; Edit ▸ Spelling and Grammar ▸ Custom Dictionary… lists and edits your words.
 
         Outline (⌃⌘S): shows the heading hierarchy in a sidebar. Click a heading to jump to it.
 
@@ -135,7 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Coach (⌃⌘K): a Claude-powered coach on the right. Click "Plan my writing" to get a schedule you approve or change; it then reminds you every time you open the document and nudges you when you pause mid-sentence, keep rewriting, or go idle. Runs on your Claude subscription through Claude Code (sign in once), or on an Anthropic API key (Coach menu).
 
-        Grammar colors (⌥⌘G) estimate subject, predicate, object and modifiers using macOS's language tagger.
+        Grammar colors (⌥⌘G) estimate subject, predicate, object and modifiers using macOS's language tagger, or LaserFocus's own rules for Indonesian.
         """
         alert.runModal()
     }
@@ -264,6 +270,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         spelling.addItem(item("Check Spelling While Typing", #selector(NSTextView.toggleContinuousSpellChecking(_:)), ""))
         spelling.addItem(item("Check Grammar With Spelling", #selector(NSTextView.toggleGrammarChecking(_:)), ""))
         spelling.addItem(item("Correct Spelling Automatically", #selector(NSTextView.toggleAutomaticSpellingCorrection(_:)), ""))
+        spelling.addItem(.separator())
+        spelling.addItem(item("Custom Dictionary…", #selector(showCustomDictionary(_:)), ""))
         menu.addItem(submenu(spelling, title: "Spelling and Grammar"))
 
         let substitutions = NSMenu(title: "Substitutions")

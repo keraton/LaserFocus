@@ -22,8 +22,10 @@ The Swift runtime is bundled inside the app so it also runs on macOS versions ol
 | Dim or hide | ⇧⌘D switches between dimming unfocused text and hiding it completely |
 | Themes | View ▸ Theme: Light, Dark, Match System. ⇧⌘L toggles |
 | Markdown | Live styling of headings, bold, italic, code, code blocks, quotes, lists, links, strikethrough. Files are saved as plain `.md` |
-| Autocomplete | Suggestions from the macOS spell checker appear faintly after the caret. **Tab** accepts, **Esc** dismisses, **⌥Esc** shows the full list. The language is detected per paragraph, and any language with a macOS dictionary works |
-| Grammar colors | ⌥⌘G colors subject, predicate (verbs), object and modifiers |
+| Autocomplete | Suggestions from the macOS spell checker appear faintly after the caret. **Tab** accepts, **Esc** dismisses, **⌥Esc** shows the full list. The language is detected per paragraph, and any language with a macOS dictionary works, Indonesian included |
+| Typos | Misspelled words are underlined as you write, in Indonesian too. Right-click one for corrections, **Ignore Spelling**, or **Add “word” to Dictionary** |
+| Custom dictionary | Edit ▸ Spelling and Grammar ▸ Custom Dictionary… lists the words you added, and lets you add or remove words. Added words are also taught to macOS, so other apps accept them too |
+| Grammar colors | ⌥⌘G colors subject, predicate (verbs), object and modifiers, including in Indonesian |
 | Outline sidebar | ⌃⌘S or View ▸ Show Outline shows the heading hierarchy on the left. Click a heading to jump to it. The section you're in is highlighted |
 | Annotations | Select text and press ⌥⌘A (or right-click ▸ Add Annotation) to attach a note without changing your text. With nothing selected, the current sentence is annotated. Notes appear as cards in the sidebar's **Notes** tab (⌃⌘A). Click a card to jump to its text. Annotated text is highlighted and stays attached while you edit |
 | Writing coach | A Claude-powered coach on the right (⌃⌘K). See below |
@@ -110,6 +112,20 @@ This works well for simple sentences. Complex clauses and imperatives can be col
 Supported languages include English, French, German, Italian, Spanish, Portuguese, Russian
 and Turkish.
 
+macOS has no Indonesian tagger, so Indonesian paragraphs use LaserFocus's own rules: lists of
+pronouns, prepositions, conjunctions, adverbs and common adjectives and root verbs, plus verb
+affixes (me-, mem-, men-, meng-, meny-, ber-, di-, ter-, memper-). Words after *yang* count as
+modifiers of the noun before them, and other words count as nouns.
+
+### About Indonesian spell checking
+
+macOS lists an Indonesian dictionary, but it accepts every word, and its language detection
+mistakes Indonesian for Turkish. LaserFocus recognizes Indonesian paragraphs by their common
+words and affixes, and checks each word against the Indonesian word list macOS uses for
+completions. Forms with -nya, -ku, -mu, -lah, -kah or -pun, repeated words (*anak-anak*) and
+compounds inside a confix (*pertanggungjawaban*) are accepted. So are names, acronyms, inline
+code and links.
+
 ## Layout
 
 ```
@@ -129,9 +145,12 @@ Sources/
   ClaudeClient.swift         Claude Messages API client, Keychain key storage, coach log
   ClaudeCodeClient.swift     runs the coach through Claude Code on your Claude subscription
   EditorViewController.swift text column, focus dimming, typewriter mode, status line
-  FocusTextView.swift        inline autocomplete
+  FocusTextView.swift        inline autocomplete, spelling marks and the spelling context menu
   MarkdownStyler.swift       Markdown and grammar highlighting
-  GrammarTagger.swift        subject/predicate/object estimation
+  GrammarTagger.swift        subject/predicate/object estimation (system tagger and Indonesian rules)
+  Indonesian.swift           language detection and Indonesian word lists and affixes
+  IndonesianSpelling.swift   Indonesian spell checker and the custom dictionary
+  CustomDictionaryWindowController.swift Custom Dictionary window
   Settings.swift             preferences and light/dark palettes
 Resources/Info.plist         bundle info and document types
 ```
