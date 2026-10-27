@@ -32,7 +32,8 @@ enum FocusStyle: Int {
 }
 
 enum SidebarTab: String {
-    case outline, notes
+    /// `outline` is the heading list; `writingOutline` the writer's planned points.
+    case outline, writingOutline, notes
 }
 
 /// How the coach reaches Claude.

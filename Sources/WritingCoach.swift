@@ -42,6 +42,8 @@ final class WritingCoach {
     var caretProvider: () -> Int = { 0 }
     var titleProvider: () -> String = { "Untitled" }
     var isWindowActive: () -> Bool = { false }
+    /// The writing outline with each point's status, if the writer made one.
+    var outlineProvider: () -> String? = { nil }
     /// Called when the coach speaks up on its own, so the panel can be revealed.
     var onNudge: (() -> Void)?
 
@@ -327,7 +329,8 @@ final class WritingCoach {
     encourage them when they are stuck, and celebrate progress. Be specific to their project and the \
     numbers in the context. When they are stuck on a word or sentence and the current paragraph is \
     provided, offer two or three concrete alternatives or a sentence starter, but never write the piece \
-    for them. Being behind is a small next step, never a reason for guilt.
+    for them. Being behind is a small next step, never a reason for guilt. When the context includes a writing \
+    outline, use it to suggest which point to write next.
 
     Style: warm, direct and brief. Plain text only, no Markdown formatting. One to three sentences for \
     reminders and nudges; a little longer only when answering a question.
@@ -350,6 +353,9 @@ final class WritingCoach {
             if let status = status() { lines.append("Progress: " + status.summary) }
         } else {
             lines.append("No approved plan yet.")
+        }
+        if let outline = outlineProvider() {
+            lines.append("The writer's writing outline (what they plan to say, with progress from the last check):\n" + outline)
         }
         if let pending = store.data.pendingPlan {
             lines.append("Proposal awaiting the writer's decision:\n" + pending.description)

@@ -144,7 +144,7 @@ final class ClaudeCodeClient {
         if structured == nil, let resultData = resultText.data(using: .utf8) {
             structured = (try? JSONSerialization.jsonObject(with: resultData)) as? [String: Any]
         }
-        var reply = ClaudeReply(text: "", toolCalls: [])
+        var reply = ClaudeReply(text: "", toolCalls: [], structured: structured)
         if let structured = structured {
             reply.text = (structured["message"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if let plan = structured["plan"] as? [String: Any] {

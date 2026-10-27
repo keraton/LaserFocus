@@ -48,6 +48,8 @@ enum Keychain {
 struct ClaudeReply {
     var text: String
     var toolCalls: [(name: String, input: [String: Any])]
+    /// The whole JSON reply when Claude Code was given a schema.
+    var structured: [String: Any]? = nil
 }
 
 enum ClaudeError: LocalizedError {
@@ -72,8 +74,10 @@ final class ClaudeClient {
     private static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
 
     /// Sends one Messages API request. `completion` is called on the main queue.
+    /// `forcedTool` names a tool Claude must call, for replies that have to follow its schema.
     func send(system: String, messages: [[String: Any]], tools: [[String: Any]], effort: String,
-              useFallbacks: Bool = true, completion: @escaping (Result<ClaudeReply, Error>) -> Void) {
+              forcedTool: String? = nil, useFallbacks: Bool = true,
+              completion: @escaping (Result<ClaudeReply, Error>) -> Void) {
         guard let key = Keychain.apiKey, !key.isEmpty else {
             CoachLog.write("No API key found in the Keychain")
             completion(.failure(ClaudeError.missingKey))
@@ -93,7 +97,7 @@ final class ClaudeClient {
         }
         if !tools.isEmpty {
             body["tools"] = tools
-            body["tool_choice"] = ["type": "auto"]
+            body["tool_choice"] = forcedTool.map { ["type": "tool", "name": $0] } ?? ["type": "auto"]
         }
 
         var request = URLRequest(url: Self.endpoint)
@@ -120,7 +124,7 @@ final class ClaudeClient {
                    message.lowercased().contains("fallback") || message.lowercased().contains("beta") {
                     CoachLog.write("Retrying without fallbacks after: \(message)")
                     self.send(system: system, messages: messages, tools: tools, effort: effort,
-                              useFallbacks: false, completion: completion)
+                              forcedTool: forcedTool, useFallbacks: false, completion: completion)
                     return
                 }
                 if case .failure(let error) = result {

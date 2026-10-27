@@ -8,11 +8,13 @@ final class Document: NSDocument {
     private weak var editor: EditorViewController?
     private let annotations = AnnotationStore()
     private let coach = CoachStore()
+    private let writingOutline = WritingOutlineStore()
 
     override init() {
         super.init()
         annotations.onUserChange = { [weak self] in self?.updateChangeCount(.changeDone) }
         coach.onUserChange = { [weak self] in self?.updateChangeCount(.changeDone) }
+        writingOutline.onUserChange = { [weak self] in self?.updateChangeCount(.changeDone) }
     }
 
     override class var autosavesInPlace: Bool { true }
@@ -26,7 +28,8 @@ final class Document: NSDocument {
                               backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.minSize = NSSize(width: 420, height: 300)
-        window.contentViewController = DocumentViewController(editor: editor, annotations: annotations, coachStore: coach)
+        window.contentViewController = DocumentViewController(editor: editor, annotations: annotations,
+                                                              writingOutline: writingOutline, coachStore: coach)
         window.setContentSize(NSSize(width: 1240, height: 760))
         window.center()
 
@@ -42,7 +45,8 @@ final class Document: NSDocument {
 
     override func data(ofType typeName: String) throws -> Data {
         editor?.textView.breakUndoCoalescing()
-        return Data(coach.fileText(body: annotations.fileText(body: currentText)).utf8)
+        let withNotes = annotations.fileText(body: currentText)
+        return Data(coach.fileText(body: writingOutline.fileText(body: withNotes)).utf8)
     }
 
     override func read(from data: Data, ofType typeName: String) throws {
@@ -52,8 +56,9 @@ final class Document: NSDocument {
         guard let decoded = text else {
             throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadInapplicableStringEncodingError)
         }
-        // Hidden blocks sit at the end of the file: coach data last, annotations before it.
-        loadedText = annotations.load(fromFile: coach.load(fromFile: decoded))
+        // Hidden blocks sit at the end of the file: coach data last, the writing outline
+        // before it, annotations before that.
+        loadedText = annotations.load(fromFile: writingOutline.load(fromFile: coach.load(fromFile: decoded)))
         // Revert / external change: refresh the open editor.
         editor?.text = loadedText
     }

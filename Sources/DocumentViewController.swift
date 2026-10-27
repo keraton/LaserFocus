@@ -5,6 +5,8 @@ import AppKit
 final class DocumentViewController: NSSplitViewController, NSMenuItemValidation {
     let editor: EditorViewController
     private let annotations: AnnotationStore
+    private let writingOutline: WritingOutlineStore
+    private let outlineChecker: OutlineChecker
     private let sidebar: SidebarViewController
     private let settings = Settings.shared
     private var sidebarItem: NSSplitViewItem!
@@ -12,10 +14,13 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
     private let coachPanel: CoachViewController
     private var coachItem: NSSplitViewItem!
 
-    init(editor: EditorViewController, annotations: AnnotationStore, coachStore: CoachStore) {
+    init(editor: EditorViewController, annotations: AnnotationStore, writingOutline: WritingOutlineStore,
+         coachStore: CoachStore) {
         self.editor = editor
         self.annotations = annotations
-        sidebar = SidebarViewController(store: annotations)
+        self.writingOutline = writingOutline
+        outlineChecker = OutlineChecker(store: writingOutline)
+        sidebar = SidebarViewController(store: annotations, writingOutline: writingOutline, checker: outlineChecker)
         coach = WritingCoach(store: coachStore)
         coachPanel = CoachViewController(coach: coach)
         super.init(nibName: nil, bundle: nil)
@@ -58,6 +63,10 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
         coach.titleProvider = { [weak self] in self?.documentTitle() ?? "Untitled" }
         coach.isWindowActive = { [weak self] in NSApp.isActive && (self?.view.window?.isKeyWindow ?? false) }
         coach.onNudge = { [weak self] in self?.setCoachVisible(true) }
+        coach.outlineProvider = { [weak self] in
+            guard let store = self?.writingOutline, !store.points.isEmpty else { return nil }
+            return store.promptText(includeIDs: false)
+        }
         editor.onEdit = { [weak self] inserted, deleted in self?.coach.recordEdit(inserted: inserted, deleted: deleted) }
 
         sidebar.outline.onSelectHeading = { [weak self] location in
@@ -66,6 +75,9 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
         sidebar.notes.onReveal = { [weak self] annotation in
             self?.editor.reveal(range: annotation.range)
         }
+        sidebar.writingOutline.onCheck = { [weak self] in self?.checkOutline(nil) }
+        sidebar.writingOutline.onReveal = { [weak self] quote in self?.revealQuote(quote) }
+        sidebar.writingOutline.wordCountProvider = { [weak self] in TextStats.words(in: self?.editor.text ?? "") }
         editor.onTextChange = { [weak self] in self?.scheduleOutlineRefresh() }
         editor.onCaretMove = { [weak self] caret in
             guard let self = self, !self.sidebarItem.isCollapsed else { return }
@@ -102,7 +114,11 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
     @objc private func refreshOutline() {
         coach.textDidChange()
         guard settings.showSidebar else { return }
-        sidebar.outline.update(text: editor.text, caret: editor.caretLocation)
+        switch settings.sidebarTab {
+        case .outline: sidebar.outline.update(text: editor.text, caret: editor.caretLocation)
+        case .writingOutline: sidebar.writingOutline.updateHeader()
+        case .notes: break
+        }
     }
 
     private func documentTitle() -> String {
@@ -140,6 +156,44 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
         coachPanel.focusInput()
     }
 
+    // MARK: Writing outline
+
+    /// Shows the writing outline and asks Claude which points the text covers.
+    @objc func checkOutline(_ sender: Any?) {
+        settings.sidebarTab = .writingOutline
+        settings.showSidebar = true
+        outlineChecker.check(text: editor.text, title: documentTitle())
+    }
+
+    @objc func addOutlinePoint(_ sender: Any?) {
+        settings.sidebarTab = .writingOutline
+        settings.showSidebar = true
+        DispatchQueue.main.async { [weak self] in self?.sidebar.writingOutline.focusAddField() }
+    }
+
+    /// Selects a passage Claude quoted. Quotes may differ slightly from the text (case, spacing),
+    /// so looser searches follow an exact one.
+    private func revealQuote(_ quote: String) {
+        let ns = editor.text as NSString
+        var found = ns.range(of: quote)
+        if found.location == NSNotFound { found = ns.range(of: quote, options: [.caseInsensitive, .diacriticInsensitive]) }
+        if found.location == NSNotFound {
+            // Try a shorter start of the quote, then its first few words.
+            let words = quote.split(separator: " ")
+            for count in [8, 5, 3] where words.count > count {
+                found = ns.range(of: words.prefix(count).joined(separator: " "), options: [.caseInsensitive])
+                if found.location != NSNotFound { break }
+            }
+        }
+        guard found.location != NSNotFound else {
+            NSSound.beep()
+            return
+        }
+        editor.reveal(range: found)
+        editor.textView.setSelectedRange(found)
+        view.window?.makeFirstResponder(editor.textView)
+    }
+
     // MARK: Annotations
 
     /// Annotates the selected text, or the sentence around the caret when nothing is selected.
@@ -168,6 +222,9 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(checkOutline(_:)) {
+            return !outlineChecker.isChecking && !writingOutline.points.isEmpty
+        }
         if item.action == #selector(addAnnotation(_:)) {
             return !editor.textView.string.isEmpty
         }

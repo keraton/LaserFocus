@@ -1,16 +1,20 @@
 import AppKit
 
-/// Left sidebar with two tabs: the heading outline and the annotation notes.
+/// Left sidebar with three tabs: the document's headings, the writing outline and the annotation notes.
 final class SidebarViewController: NSViewController {
     let outline = OutlineViewController()
+    let writingOutline: WritingOutlineViewController
     let notes: AnnotationsViewController
 
     private let settings = Settings.shared
-    private let tabs = NSSegmentedControl(labels: ["Outline", "Notes"], trackingMode: .selectOne,
+    private let tabs = NSSegmentedControl(labels: ["Headings", "Outline", "Notes"], trackingMode: .selectOne,
                                           target: nil, action: nil)
     private let container = NSView()
 
-    init(store: AnnotationStore) {
+    private static let order: [SidebarTab] = [.outline, .writingOutline, .notes]
+
+    init(store: AnnotationStore, writingOutline: WritingOutlineStore, checker: OutlineChecker) {
+        self.writingOutline = WritingOutlineViewController(store: writingOutline, checker: checker)
         notes = AnnotationsViewController(store: store)
         super.init(nibName: nil, bundle: nil)
     }
@@ -45,7 +49,7 @@ final class SidebarViewController: NSViewController {
         ])
         view = root
 
-        for child in [outline, notes] as [NSViewController] {
+        for child in [outline, writingOutline, notes] as [NSViewController] {
             addChild(child)
             child.view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(child.view)
@@ -63,14 +67,15 @@ final class SidebarViewController: NSViewController {
     }
 
     @objc private func tabChanged() {
-        settings.sidebarTab = tabs.selectedSegment == 1 ? .notes : .outline
+        settings.sidebarTab = Self.order[max(0, tabs.selectedSegment)]
     }
 
     @objc private func applySettings() {
         view.layer?.backgroundColor = settings.palette.sidebar.cgColor
         let tab = settings.sidebarTab
-        tabs.selectedSegment = tab == .notes ? 1 : 0
+        tabs.selectedSegment = Self.order.firstIndex(of: tab) ?? 0
         outline.view.isHidden = tab != .outline
+        writingOutline.view.isHidden = tab != .writingOutline
         notes.view.isHidden = tab != .notes
     }
 }

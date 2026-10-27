@@ -26,7 +26,8 @@ The Swift runtime is bundled inside the app so it also runs on macOS versions ol
 | Typos | Misspelled words are underlined as you write, in Indonesian too. Right-click one for corrections, **Ignore Spelling**, or **Add “word” to Dictionary** |
 | Custom dictionary | Edit ▸ Spelling and Grammar ▸ Custom Dictionary… lists the words you added, and lets you add or remove words. Added words are also taught to macOS, so other apps accept them too |
 | Grammar colors | ⌥⌘G colors subject, predicate (verbs), object and modifiers, including in Indonesian |
-| Outline sidebar | ⌃⌘S or View ▸ Show Outline shows the heading hierarchy on the left. Click a heading to jump to it. The section you're in is highlighted |
+| Headings sidebar | ⌃⌘S or View ▸ Show Headings shows the heading hierarchy on the left. Click a heading to jump to it. The section you're in is highlighted |
+| Writing outline | ⌃⌘O or the sidebar's **Outline** tab: list the points you mean to make, and Claude checks which ones your text already covers. See below |
 | Annotations | Select text and press ⌥⌘A (or right-click ▸ Add Annotation) to attach a note without changing your text. With nothing selected, the current sentence is annotated. Notes appear as cards in the sidebar's **Notes** tab (⌃⌘A). Click a card to jump to its text. Annotated text is highlighted and stays attached while you edit |
 | Writing coach | A Claude-powered coach on the right (⌃⌘K). See below |
 | Typewriter scrolling | ⌥⌘T keeps the current line centered |
@@ -81,6 +82,25 @@ messages.
 The plan, daily progress and conversation are saved in the document, in the same kind of
 hidden block as annotations (`<!-- laserfocus:coach … -->`).
 
+### Writing outline
+
+The sidebar's **Outline** tab keeps track of your original ideas while the text grows.
+
+- **Write your points** in the "Add a point…" field, or with ⌃⇧⌘O. In a point, Return adds
+  another below it, Tab and ⇧Tab indent and outdent, and Delete in an empty point removes it.
+  Right-click a point to move or delete it.
+- **Check with Claude** (⌃⌘C) sends the outline and your text to Claude, which marks each point
+  ● written, ◐ partly written or ○ not written yet. Each point gets a one-line comment (what's
+  missing, or a hint for writing it) and the passage that covers it; click the passage to jump
+  to it. A short summary suggests what to write next.
+- **Set a status yourself** by clicking its circle. Claude's checks then leave it alone, until
+  you right-click it and choose **Let Claude Decide**.
+- The header shows how many points are written and whether the text changed since the last check.
+- The coach sees the outline too, so it can suggest which point to work on next.
+
+Checks use the same connection as the coach (Claude Code or an API key). The outline is saved
+in the `.md` file, in a hidden block like the annotations.
+
 ### How annotations are saved
 
 Annotations live in the same `.md` file, in a hidden HTML comment block at the very end:
@@ -134,11 +154,14 @@ Sources/
   AppDelegate.swift          menus and preference actions
   Document.swift             NSDocument: load and save .md / .txt
   DocumentViewController.swift split view: sidebar + editor, Add Annotation
-  SidebarViewController.swift Outline / Notes tabs
-  OutlineViewController.swift heading hierarchy
+  SidebarViewController.swift Headings / Outline / Notes tabs
+  OutlineViewController.swift heading hierarchy (Headings tab)
   AnnotationsViewController.swift annotation cards
   AnnotationStore.swift      annotation model, anchoring and file storage
   HiddenBlock.swift          hidden data blocks at the end of the .md file, word/paragraph counts
+  WritingOutlineStore.swift  writing outline points, coverage status, file storage
+  WritingOutlineViewController.swift Outline tab: point editor, progress, Claude's verdicts
+  OutlineChecker.swift       asks Claude which outline points the text covers
   CoachViewController.swift  coach panel: progress, chat, plan cards
   WritingCoach.swift         coach logic: planning, plan status, stuck detection, prompts
   CoachStore.swift           plan / progress / chat model saved in the document

@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func toggleOutline(_ sender: Any?) { toggleSidebar(.outline) }
     @objc func toggleNotes(_ sender: Any?) { toggleSidebar(.notes) }
+    @objc func toggleWritingOutline(_ sender: Any?) { toggleSidebar(.writingOutline) }
 
     /// Shows the sidebar on `tab`, or hides it if it is already showing that tab.
     private func toggleSidebar(_ tab: SidebarTab) {
@@ -135,7 +136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         Typos: misspelled words are underlined, in Indonesian too. Right-click one for corrections or to add it to your dictionary; Edit ▸ Spelling and Grammar ▸ Custom Dictionary… lists and edits your words.
 
-        Outline (⌃⌘S): shows the heading hierarchy in a sidebar. Click a heading to jump to it.
+        Headings (⌃⌘S): shows the heading hierarchy in a sidebar. Click a heading to jump to it.
+
+        Writing outline (⌃⌘O): list the points you mean to make, before or while you write. Return adds a point, Tab and ⇧Tab indent. "Check with Claude" (⌃⌘C) marks each point as written, partly written or not yet, with the passage that covers it. Click a circle to set a point yourself.
 
         Annotations: select text and press ⌥⌘A (or right-click ▸ Add Annotation) to attach a note without changing your text. ⌃⌘A shows all notes. Notes are saved invisibly at the end of the .md file.
 
@@ -160,6 +163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             item.state = settings.autocomplete ? .on : .off
         case #selector(toggleOutline(_:)):
             item.state = settings.showSidebar && settings.sidebarTab == .outline ? .on : .off
+        case #selector(toggleWritingOutline(_:)):
+            item.state = settings.showSidebar && settings.sidebarTab == .writingOutline ? .on : .off
         case #selector(toggleNotes(_:)):
             item.state = settings.showSidebar && settings.sidebarTab == .notes ? .on : .off
         case #selector(setCoachBackend(_:)):
@@ -294,7 +299,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func viewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
 
-        menu.addItem(item("Show Outline", #selector(toggleOutline(_:)), "s", [.command, .control]))
+        menu.addItem(item("Show Headings", #selector(toggleOutline(_:)), "s", [.command, .control]))
+        menu.addItem(item("Show Writing Outline", #selector(toggleWritingOutline(_:)), "o", [.command, .control]))
         menu.addItem(item("Show Annotations", #selector(toggleNotes(_:)), "a", [.command, .control]))
         menu.addItem(.separator())
 
@@ -335,6 +341,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         menu.addItem(item("Show Coach", #selector(DocumentViewController.toggleCoach(_:)), "k", [.command, .control]))
         menu.addItem(item("Plan My Writing…", #selector(DocumentViewController.planWriting(_:)), "p", [.command, .control]))
         menu.addItem(item("Message Coach", #selector(DocumentViewController.messageCoach(_:)), "m", [.command, .control]))
+        menu.addItem(.separator())
+        menu.addItem(item("Add Outline Point", #selector(DocumentViewController.addOutlinePoint(_:)), "o", [.command, .control, .shift]))
+        menu.addItem(item("Check Outline with Claude", #selector(DocumentViewController.checkOutline(_:)), "c", [.command, .control]))
         menu.addItem(.separator())
         menu.addItem(item("Nudge Me When I'm Stuck", #selector(toggleCoachNudges(_:)), ""))
         menu.addItem(item("Share Current Paragraph With Coach", #selector(toggleCoachSharesText(_:)), ""))
