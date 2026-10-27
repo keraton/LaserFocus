@@ -30,6 +30,7 @@ The Swift runtime is bundled inside the app so it also runs on macOS versions ol
 | Writing outline | ⌃⌘O or the sidebar's **Outline** tab: list the points you mean to make, and Claude checks which ones your text already covers. See below |
 | Annotations | Select text and press ⌥⌘A (or right-click ▸ Add Annotation) to attach a note without changing your text. With nothing selected, the current sentence is annotated. Notes appear as cards in the sidebar's **Notes** tab (⌃⌘A). Click a card to jump to its text. Annotated text is highlighted and stays attached while you edit |
 | Writing coach | A Claude-powered coach on the right (⌃⌘K). See below |
+| Sync between Macs | File ▸ Writing Library keeps a folder of documents in sync through a private GitHub repository. See below |
 | Typewriter scrolling | ⌥⌘T keeps the current line centered |
 | Fonts | View ▸ Font: Serif, Sans, Mono. ⌘= / ⌘- change the size |
 | Saving | Standard macOS document behaviour: Save, Duplicate, Rename, Move To, Revert / browse versions, autosave, Open Recent |
@@ -100,6 +101,39 @@ The sidebar's **Outline** tab keeps track of your original ideas while the text 
 
 Checks use the same connection as the coach (Claude Code or an API key). The outline is saved
 in the `.md` file, in a hidden block like the annotations.
+
+### Writing library: sync between Macs
+
+Notes, the writing outline, the coach chat and the plan are all stored inside each `.md`
+file, so syncing the files carries everything. LaserFocus syncs a **writing library**: a
+folder that is a git repository, backed by a private GitHub repository.
+
+**Set up** with File ▸ Writing Library ▸ Sync Settings…:
+
+1. Connect GitHub. If the GitHub CLI is installed and signed in (`gh auth login`), LaserFocus
+   uses that login. Otherwise paste a token with the `repo` scope; it is kept in the Keychain.
+   The token is handed to git per command and never written to git's configuration.
+2. On the first Mac choose **Create a New Library**: LaserFocus creates a private repository
+   (for example `you/writing`) and a folder (`~/Documents/Writing`).
+3. On every other Mac choose **Use an Existing Library** and pick the same repository.
+
+Git is needed too. It comes with Apple's Command Line Tools (`xcode-select --install`), which
+also run on macOS 10.13.
+
+**Use it:** save documents in the library folder, or use File ▸ Writing Library ▸ Move Document
+to Library. Open them with ⌥⌘O. The status bar shows "Synced 2 min ago", "Syncing…" or
+"Offline". LaserFocus syncs when a document opens, about a minute after you stop typing, when
+a document closes, when you quit (waiting up to 20 seconds), every 5 minutes while active, and
+with Sync Now (⌃⌥⌘S).
+
+**How a sync works:** commit local changes ("Update essay.md from MacBook Air"), fetch, merge,
+push. Open documents reload when a merge changes them. If the same part of a document changed
+on two Macs, this Mac keeps its version and the other one is saved next to it as
+`essay (from MacBook Air).md`, and LaserFocus tells you. Coach chats and outline points are
+written one per line, so edits on different Macs usually merge cleanly. The custom dictionary
+is kept in `.laserfocus/dictionary.txt`, and word lists from two Macs are combined.
+
+Settings like theme and font stay per Mac, as do the Claude Code sign-in and API key.
 
 ### How annotations are saved
 
@@ -175,5 +209,8 @@ Sources/
   IndonesianSpelling.swift   Indonesian spell checker and the custom dictionary
   CustomDictionaryWindowController.swift Custom Dictionary window
   Settings.swift             preferences and light/dark palettes
+  SyncLibrary.swift          writing library sync: commit, merge, conflict copies, push; setup
+  SyncWindowController.swift Sync Settings window
+  Git.swift                  git runner, token hand-off (GIT_ASKPASS) and GitHub API calls
 Resources/Info.plist         bundle info and document types
 ```

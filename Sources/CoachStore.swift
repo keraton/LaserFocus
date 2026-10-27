@@ -118,8 +118,10 @@ final class CoachStore {
 
     func fileText(body: String) -> String {
         let isEmpty = data.plan == nil && data.pendingPlan == nil && data.chat.isEmpty
-        guard !isEmpty, let json = try? Self.encoder.encode(data),
-              let contents = String(data: json, encoding: .utf8) else { return body }
+        var shell = data
+        shell.chat = []
+        guard !isEmpty, let contents = HiddenBlock.json(data, emptied: shell, key: "chat", elements: data.chat,
+                                                         encoder: Self.encoder) else { return body }
         return HiddenBlock.append("coach", contents: contents, to: body)
     }
 

@@ -187,7 +187,8 @@ final class IndonesianSpellChecker {
 }
 
 /// Words the writer added to the dictionary. They are also taught to macOS's spell checker,
-/// so they're accepted in every language and in other apps.
+/// so they're accepted in every language and in other apps. With a writing library set up,
+/// the list is also kept in the library, so it syncs to other Macs.
 final class CustomDictionary {
     static let shared = CustomDictionary()
     private let key = "customWords"
@@ -216,10 +217,29 @@ final class CustomDictionary {
         save()
     }
 
-    private func save() {
+    /// Adopts the library's list after a sync: words added on other Macs are learned,
+    /// words removed there are forgotten.
+    func reloadFromLibrary() {
+        guard let url = SyncLibrary.shared.dictionaryURL,
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+        let synced = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let syncedSet = Set(synced.map { $0.lowercased() })
+        guard syncedSet != lowercased else { return }
+        for word in words where !syncedSet.contains(word.lowercased()) { NSSpellChecker.shared.unlearnWord(word) }
+        for word in synced where !lowercased.contains(word.lowercased()) { NSSpellChecker.shared.learnWord(word) }
+        words = synced
+        save(toLibrary: false)
+    }
+
+    private func save(toLibrary: Bool = true) {
         words.sort { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
         lowercased = Set(words.map { $0.lowercased() })
         UserDefaults.standard.set(words, forKey: key)
+        if toLibrary, let url = SyncLibrary.shared.dictionaryURL {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? (words.joined(separator: "\n") + (words.isEmpty ? "" : "\n")).write(to: url, atomically: true, encoding: .utf8)
+            SyncLibrary.shared.scheduleSync(after: 10)
+        }
         NotificationCenter.default.post(name: .customDictionaryChanged, object: nil)
     }
 }

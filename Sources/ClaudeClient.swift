@@ -1,19 +1,28 @@
 import Foundation
 import Security
 
-/// The writer's Anthropic API key, kept in the macOS Keychain.
+/// Secrets kept in the macOS Keychain: the Anthropic API key and the GitHub token for sync.
 enum Keychain {
     private static let service = "LaserFocus"
-    private static let account = "anthropic-api-key"
+    private static let apiKeyAccount = "anthropic-api-key"
+    static let gitHubTokenAccount = "github-token"
 
-    private static var query: [String: Any] {
+    private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account]
     }
 
-    static var apiKey: String? {
-        var lookup = query
+    static var apiKey: String? { string(for: apiKeyAccount) }
+
+    static var hasAPIKey: Bool { !(apiKey ?? "").isEmpty }
+
+    /// Saves (or, with nil, removes) the key. Returns nil on success, else a description of the failure.
+    @discardableResult
+    static func setAPIKey(_ key: String?) -> String? { set(key, for: apiKeyAccount) }
+
+    static func string(for account: String) -> String? {
+        var lookup = query(account)
         lookup[kSecReturnData as String] = true
         lookup[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
@@ -22,21 +31,19 @@ enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
-    static var hasAPIKey: Bool { !(apiKey ?? "").isEmpty }
-
-    /// Saves (or, with nil, removes) the key. Returns nil on success, else a description of the failure.
+    /// Saves (or, with nil, removes) a secret. Returns nil on success, else a description of the failure.
     @discardableResult
-    static func setAPIKey(_ key: String?) -> String? {
-        let deleted = SecItemDelete(query as CFDictionary)
-        guard let key = key?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else {
+    static func set(_ value: String?, for account: String) -> String? {
+        let deleted = SecItemDelete(query(account) as CFDictionary)
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
             return deleted == errSecSuccess || deleted == errSecItemNotFound ? nil : message(for: deleted)
         }
-        var item = query
-        item[kSecValueData as String] = Data(key.utf8)
+        var item = query(account)
+        item[kSecValueData as String] = Data(value.utf8)
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else { return message(for: status) }
         // Read it back: a write the app can't read later is as good as no write.
-        return apiKey == key ? nil : "The key was written but could not be read back from the Keychain."
+        return string(for: account) == value ? nil : "The value was written but could not be read back from the Keychain."
     }
 
     private static func message(for status: OSStatus) -> String {

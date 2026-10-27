@@ -29,6 +29,25 @@ enum HiddenBlock {
     }
 }
 
+extension HiddenBlock {
+    /// Encodes `value` as compact JSON, except that the array under `key` gets one element
+    /// per line. Two Macs adding to the list then usually merge cleanly in git.
+    static func json<T: Encodable, Element: Encodable>(_ value: T, emptied: T, key: String, elements: [Element],
+                                                     encoder: JSONEncoder) -> String? {
+        guard let shell = try? encoder.encode(emptied), let text = String(data: shell, encoding: .utf8) else { return nil }
+        var lines: [String] = []
+        for element in elements {
+            guard let data = try? encoder.encode(element), let line = String(data: data, encoding: .utf8) else { return nil }
+            lines.append(line)
+        }
+        let empty = "\"\(key)\":[]"
+        guard !lines.isEmpty, text.contains(empty) else {
+            return (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) }
+        }
+        return text.replacingOccurrences(of: empty, with: "\n\"\(key)\":[\n" + lines.joined(separator: ",\n") + "\n]\n")
+    }
+}
+
 /// Counts used by the status line and the writing plan.
 enum TextStats {
     static func words(in text: String) -> Int {

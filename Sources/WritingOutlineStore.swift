@@ -161,7 +161,10 @@ final class WritingOutlineStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        guard let json = try? encoder.encode(data), let text = String(data: json, encoding: .utf8) else { return body }
+        var shell = data
+        shell.points = []
+        guard let text = HiddenBlock.json(data, emptied: shell, key: "points", elements: data.points,
+                                          encoder: encoder) else { return body }
         return HiddenBlock.append("outline", contents: text, to: body)
     }
 

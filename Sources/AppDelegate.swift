@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        SyncLibrary.shared.start()
         if #available(macOS 10.14, *) {
             // Follow the OS light/dark switch when the theme is "System".
             appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
@@ -149,8 +150,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         alert.runModal()
     }
 
+    /// Uploads the last changes before quitting (for at most 20 seconds).
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let library = SyncLibrary.shared
+        guard library.isConfigured, library.phase != .offline else { return .terminateNow }
+        var replied = false
+        let reply = {
+            guard !replied else { return }
+            replied = true
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        library.syncNow(completion: reply)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: reply)
+        return .terminateLater
+    }
+
+    @objc func showSyncSettings(_ sender: Any?) {
+        SyncWindowController.shared.showWindow(sender)
+    }
+
+    @objc func syncNow(_ sender: Any?) {
+        SyncLibrary.shared.syncNow()
+    }
+
+    @objc func openFromLibrary(_ sender: Any?) {
+        guard let folder = SyncLibrary.shared.folder else { return showSyncSettings(sender) }
+        let panel = NSOpenPanel()
+        panel.directoryURL = folder
+        panel.allowedFileTypes = ["md", "markdown", "txt"]
+        panel.allowsMultipleSelection = true
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
+        }
+    }
+
+    @objc func showLibraryInFinder(_ sender: Any?) {
+        guard let folder = SyncLibrary.shared.folder else { return showSyncSettings(sender) }
+        NSWorkspace.shared.activateFileViewerSelecting([folder])
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
+        case #selector(syncNow(_:)), #selector(openFromLibrary(_:)), #selector(showLibraryInFinder(_:)):
+            return SyncLibrary.shared.isConfigured
         case #selector(setTheme(_:)):
             item.state = [ThemeChoice.light, .dark, .system][item.tag] == settings.theme ? .on : .off
         case #selector(setFocusMode(_:)):
@@ -237,6 +280,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         saveAs.isAlternate = true
         menu.addItem(saveAs)
         menu.addItem(item("Revert To…", #selector(NSDocument.revertToSaved(_:)), ""))
+        menu.addItem(.separator())
+        let library = NSMenu(title: "Writing Library")
+        library.addItem(item("Open from Library…", #selector(openFromLibrary(_:)), "o", [.command, .option]))
+        library.addItem(item("Move Document to Library", #selector(Document.moveToLibrary(_:)), ""))
+        library.addItem(item("Show Library in Finder", #selector(showLibraryInFinder(_:)), ""))
+        library.addItem(.separator())
+        library.addItem(item("Sync Now", #selector(syncNow(_:)), "s", [.command, .control, .option]))
+        library.addItem(item("Sync Settings…", #selector(showSyncSettings(_:)), ""))
+        menu.addItem(submenu(library, title: "Writing Library"))
         menu.addItem(.separator())
         menu.addItem(item("Page Setup…", #selector(NSDocument.runPageLayout(_:)), "p", [.command, .shift]))
         menu.addItem(item("Print…", #selector(NSView.printView(_:)), "p"))

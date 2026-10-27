@@ -20,6 +20,8 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     var onCaretMove: ((Int) -> Void)?
     /// Called for each edit the writer makes, with the characters inserted and deleted.
     var onEdit: ((Int, Int) -> Void)?
+    /// The writing library's sync status for this document, or nil when it isn't in the library.
+    var syncStatus: () -> String? = { nil }
 
     var caretLocation: Int { textView.selectedRange().location }
 
@@ -123,6 +125,8 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
 
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
                                                name: .settingsChanged, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(syncStateChanged),
+                                               name: .syncStateChanged, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled),
                                                name: NSView.boundsDidChangeNotification,
                                                object: scrollView.contentView)
@@ -343,7 +347,9 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
         updateStatus()
     }
 
-    private func updateStatus() {
+    @objc private func syncStateChanged() { updateStatus() }
+
+    func updateStatus() {
         let palette = settings.palette
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11),
@@ -359,7 +365,8 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
             }
         }
         let focus = settings.focusMode == .off ? "" : "Focus: \(settings.focusMode.title)   "
-        line.append(NSAttributedString(string: "\(focus)\(wordCount) words", attributes: attributes))
+        let sync = syncStatus().map { "\($0)   " } ?? ""
+        line.append(NSAttributedString(string: "\(sync)\(focus)\(wordCount) words", attributes: attributes))
         statusLabel.attributedStringValue = line
     }
 }

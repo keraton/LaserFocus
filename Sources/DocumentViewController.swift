@@ -58,6 +58,10 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
         coachItem.isCollapsed = !settings.showCoach
         addSplitViewItem(coachItem)
 
+        editor.syncStatus = { [weak self] in
+            let url = (self?.view.window?.windowController?.document as? NSDocument)?.fileURL
+            return SyncLibrary.shared.contains(url) ? SyncLibrary.shared.statusText : nil
+        }
         coach.textProvider = { [weak self] in self?.editor.text ?? "" }
         coach.caretProvider = { [weak self] in self?.editor.caretLocation ?? 0 }
         coach.titleProvider = { [weak self] in self?.documentTitle() ?? "Untitled" }
