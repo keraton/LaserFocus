@@ -3,8 +3,8 @@ import Foundation
 /// Runs the system `git` for the writing library.
 ///
 /// Credentials never touch git's own configuration: each command gets `GIT_ASKPASS` pointing
-/// back at LaserFocus itself (see ``GitAskPass``), which answers git's password prompt with
-/// the GitHub token passed in the environment.
+/// at a tiny script (see ``GitAskPass``) that answers git's password prompt with the GitHub
+/// token passed in the environment.
 enum Git {
     struct Result {
         let status: Int32
@@ -42,9 +42,8 @@ enum Git {
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_TERMINAL_PROMPT"] = "0"
         environment["LC_ALL"] = "C"
-        if let token = token, let me = Bundle.main.executablePath {
-            environment["GIT_ASKPASS"] = me
-            environment[GitAskPass.flag] = "1"
+        if let token = token, let askPass = GitAskPass.scriptPath() {
+            environment["GIT_ASKPASS"] = askPass
             environment[GitAskPass.tokenVariable] = token
         }
         process.environment = environment
@@ -77,18 +76,33 @@ enum Git {
     }
 }
 
-/// LaserFocus doubles as git's password prompt: when git runs it with the flag set, it prints
-/// the token (or a username) and exits, before any app setup.
+/// git's password prompt: a small shell script in Application Support that prints a username
+/// or the token from the environment. A script, not the app itself, so it keeps working when
+/// the app is moved, updated or run from a translocated copy. The token is never written to disk.
 enum GitAskPass {
-    static let flag = "LASERFOCUS_ASKPASS"
     static let tokenVariable = "LASERFOCUS_GIT_TOKEN"
 
-    static func handleIfNeeded() {
-        let environment = ProcessInfo.processInfo.environment
-        guard environment[flag] == "1" else { return }
-        let prompt = CommandLine.arguments.dropFirst().first?.lowercased() ?? ""
-        print(prompt.hasPrefix("username") ? "x-access-token" : (environment[tokenVariable] ?? ""))
-        exit(0)
+    private static let script = """
+    #!/bin/sh
+    case "$1" in
+      Username*|username*) echo x-access-token ;;
+      *) echo "$\(tokenVariable)" ;;
+    esac
+
+    """
+
+    /// Writes the script when it is missing or outdated, and returns its path.
+    static func scriptPath() -> String? {
+        let fm = FileManager.default
+        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        let folder = support.appendingPathComponent("LaserFocus", isDirectory: true)
+        let url = folder.appendingPathComponent("git-askpass.sh")
+        if (try? String(contentsOf: url, encoding: .utf8)) != script {
+            try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            guard (try? script.write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }
+        }
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        return url.path
     }
 }
 

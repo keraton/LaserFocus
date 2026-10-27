@@ -445,25 +445,52 @@ final class SyncLibrary {
         completion(error)
     }
 
+    /// Safe to retry: a repository or folder left by an earlier attempt that stopped halfway
+    /// (for example, the first upload failed) is picked up instead of refused.
     private func performCreate(repositoryName: String, folder: URL) -> Error? {
         guard Git.isAvailable else { return SetupError.gitMissing }
         guard let token = GitHub.token()?.value else { return GitHub.Failure.noToken }
         let fm = FileManager.default
-        if fm.fileExists(atPath: folder.appendingPathComponent(".git").path) { return SetupError.alreadyRepository(folder.path) }
         do {
             let account = try GitHub.account(token: token)
-            let fullName = try GitHub.createPrivateRepository(named: repositoryName, token: token)
-            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            let fullName = "\(account.login)/\(repositoryName)"
+            let remoteURL = "https://github.com/\(fullName).git"
             @discardableResult func git(_ arguments: String...) -> Git.Result { Git.run(arguments, in: folder, token: token) }
-            for step in [git("init", "-q"), git("symbolic-ref", "HEAD", "refs/heads/main")] where !step.ok {
-                return SetupError.failed(step.message)
+
+            // The folder: new, or one an earlier attempt set up for this same repository.
+            if fm.fileExists(atPath: folder.appendingPathComponent(".git").path) {
+                let origin = git("remote", "get-url", "origin")
+                guard !origin.ok || origin.text == remoteURL else { return SetupError.alreadyRepository(folder.path) }
+            }
+
+            // The repository: create it, or reuse it if it exists but is still empty.
+            do {
+                _ = try GitHub.createPrivateRepository(named: repositoryName, token: token)
+            } catch GitHub.Failure.http(422, let message) where message.lowercased().contains("already exists") {
+                let heads = Git.run(["ls-remote", "--heads", remoteURL], in: nil, token: token)
+                guard heads.ok else { return SetupError.failed("Couldn't check \(fullName): \(heads.message)") }
+                guard heads.text.isEmpty else {
+                    return SetupError.failed("You already have a repository called “\(repositoryName)” with files in it. To use it, choose “Use an Existing Library”; otherwise pick another name.")
+                }
+            }
+
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            if !fm.fileExists(atPath: folder.appendingPathComponent(".git").path) {
+                for step in [git("init", "-q"), git("symbolic-ref", "HEAD", "refs/heads/main")] where !step.ok {
+                    return SetupError.failed(step.message)
+                }
             }
             configure(folder: folder, account: account, git: git)
             git("add", "-A")
-            git("commit", "-q", "-m", "Start writing library\n\n\(Self.markerTrailer)\(macName)")
-            git("remote", "add", "origin", "https://github.com/\(fullName).git")
-            let push = git("push", "-q", "-u", "origin", "main")
-            guard push.ok else { return SetupError.failed("The repository was created, but the first upload failed: \(push.message)") }
+            if !git("rev-parse", "--verify", "-q", "HEAD").ok || !git("status", "--porcelain").text.isEmpty {
+                git("commit", "-q", "-m", "Start writing library\n\n\(Self.markerTrailer)\(macName)")
+            }
+            if !git("remote", "get-url", "origin").ok { git("remote", "add", "origin", remoteURL) }
+            let branch = git("symbolic-ref", "--short", "HEAD").text
+            let push = git("push", "-q", "-u", "origin", branch.isEmpty ? "main" : branch)
+            guard push.ok else {
+                return SetupError.failed("The repository is ready, but the first upload failed: \(push.message). Click Create Library again to retry.")
+            }
             save(folder: folder, repository: fullName)
             return nil
         } catch {
