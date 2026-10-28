@@ -31,6 +31,8 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 if [ -f Resources/AppIcon.icns ]; then
     cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
+# Indonesian word list for spelling and autocomplete; older macOS has none of its own.
+cp -R Resources/Indonesian "$APP/Contents/Resources/Indonesian"
 
 # macOS older than 10.14.4 has no built-in Swift runtime, so bundle it.
 xcrun swift-stdlib-tool --copy --platform macosx \

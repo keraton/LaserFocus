@@ -86,11 +86,22 @@ final class FocusTextView: NSTextView {
         guard wordRange.length >= 2 else { return }
 
         let checker = NSSpellChecker.shared
-        let completions = checker.completions(forPartialWordRange: wordRange,
-                                              in: string,
-                                              language: language(around: caret.location),
-                                              inSpellDocumentWithTag: spellCheckerDocumentTag) ?? []
+        let detected = detectedLanguage(around: caret.location)
+        let language = spellingLanguage(for: detected)
+        // Without an Indonesian dictionary the system would complete Indonesian in English.
+        var completions = detected == "id" && language == nil ? [] :
+            checker.completions(forPartialWordRange: wordRange,
+                                in: string,
+                                language: language,
+                                inSpellDocumentWithTag: spellCheckerDocumentTag) ?? []
         let prefix = ns.substring(with: wordRange)
+        if detected == "id" && wordRange.length >= 3 {
+            // The bundled list is alphabetical, so offer its shortest word after the system's picks.
+            // Hyphenated forms (pendidik-ku) are only offered once the writer types a hyphen.
+            let bundled = IndonesianLexicon.shared.completions(of: prefix, limit: 500)
+                .filter { prefix.contains("-") || !$0.contains("-") }
+            completions += bundled.sorted { $0.count < $1.count }
+        }
         guard let best = completions.first(where: {
             ($0 as NSString).length > wordRange.length && $0.lowercased().hasPrefix(prefix.lowercased())
         }) else { return }
@@ -108,12 +119,17 @@ final class FocusTextView: NSTextView {
         return CharacterSet.letters.contains(scalar) || c == 0x27 /* apostrophe */
     }
 
-    /// The language of the paragraph being typed, if the spell checker has a dictionary for it.
-    private func language(around location: Int) -> String? {
+    /// The language of the paragraph being typed.
+    private func detectedLanguage(around location: Int) -> String? {
         let ns = string as NSString
         let paragraph = ns.paragraphRange(for: NSRange(location: min(location, ns.length), length: 0))
-        guard paragraph.length > 8,
-              let detected = LanguageDetector.language(of: ns.substring(with: paragraph)) else { return nil }
+        guard paragraph.length > 8 else { return nil }
+        return LanguageDetector.language(of: ns.substring(with: paragraph))
+    }
+
+    /// The spell checker's name for a language, if it has a dictionary for it.
+    private func spellingLanguage(for detected: String?) -> String? {
+        guard let detected = detected else { return nil }
         let available = NSSpellChecker.shared.availableLanguages
         if available.contains(detected) { return detected }
         return available.first { $0.hasPrefix(detected + "_") || $0.hasPrefix(detected + "-") }

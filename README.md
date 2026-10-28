@@ -175,8 +175,11 @@ modifiers of the noun before them, and other words count as nouns.
 
 macOS lists an Indonesian dictionary, but it accepts every word, and its language detection
 mistakes Indonesian for Turkish. LaserFocus recognizes Indonesian paragraphs by their common
-words and affixes, and checks each word against the Indonesian word list macOS uses for
-completions. Forms with -nya, -ku, -mu, -lah, -kah or -pun, repeated words (*anak-anak*) and
+words and affixes, and checks each word against a bundled Indonesian word list: every form in
+the Hunspell dictionary used by LibreOffice (LGPL 3.0, see `Resources/Indonesian`). Newer macOS
+versions also have an Indonesian completion list, and words in it are accepted too; older ones
+have none, which is why the list ships with the app. It also feeds Indonesian autocomplete.
+Forms with -nya, -ku, -mu, -lah, -kah or -pun, repeated words (*anak-anak*) and
 compounds inside a confix (*pertanggungjawaban*) are accepted. So are names, acronyms, inline
 code and links.
 
@@ -206,11 +209,13 @@ Sources/
   MarkdownStyler.swift       Markdown and grammar highlighting
   GrammarTagger.swift        subject/predicate/object estimation (system tagger and Indonesian rules)
   Indonesian.swift           language detection and Indonesian word lists and affixes
-  IndonesianSpelling.swift   Indonesian spell checker and the custom dictionary
+  IndonesianSpelling.swift   Indonesian spell checker, bundled word list and the custom dictionary
   CustomDictionaryWindowController.swift Custom Dictionary window
   Settings.swift             preferences and light/dark palettes
   SyncLibrary.swift          writing library sync: commit, merge, conflict copies, push; setup
   SyncWindowController.swift Sync Settings window
   Git.swift                  git runner, token hand-off (GIT_ASKPASS) and GitHub API calls
 Resources/Info.plist         bundle info and document types
+Resources/Indonesian/        Indonesian word list (from hunspell-id, LGPL 3.0) and its license
+scripts/expand-hunspell.py   rebuilds that word list from the Hunspell .dic and .aff files
 ```

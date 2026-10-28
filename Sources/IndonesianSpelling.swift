@@ -2,8 +2,9 @@ import AppKit
 
 /// Spell checking for Indonesian paragraphs.
 ///
-/// macOS ships an Indonesian word list for completions, but its Indonesian spelling
-/// dictionary accepts any word. So words are checked against the completion list instead,
+/// Newer macOS ships an Indonesian word list for completions, but its Indonesian spelling
+/// dictionary accepts any word, and older macOS has neither. So words are checked against the
+/// bundled ``IndonesianLexicon`` and, where there is one, the system's completion list,
 /// allowing for clitics (-nya, -ku, -mu, -lah, -kah, -pun), reduplication (anak-anak) and
 /// compounds inside confixes (per·tanggung·jawab·an). Words in the custom dictionary, learned
 /// words and words ignored in the document are always accepted.
@@ -111,20 +112,25 @@ final class IndonesianSpellChecker {
     // MARK: Lexicon
 
     private func completions(_ prefix: String) -> [String] {
-        checker.completions(forPartialWordRange: NSRange(location: 0, length: (prefix as NSString).length),
-                            in: prefix, language: "id", inSpellDocumentWithTag: 0) ?? []
+        let system = checker.completions(forPartialWordRange: NSRange(location: 0, length: (prefix as NSString).length),
+                                         in: prefix, language: "id", inSpellDocumentWithTag: 0) ?? []
+        return system + IndonesianLexicon.shared.completions(of: prefix, limit: 200)
     }
 
-    /// Whether the completion list knows the word, or a form derived from it.
+    /// Whether the word lists know the word, or a form derived from it.
     private func listed(_ w: String) -> Bool {
         guard w.count >= 2 else { return false }
-        return completions(w).contains { completion in
+        let lexicon = IndonesianLexicon.shared
+        if lexicon.contains(w) || lexicon.contains(w + "-" + w)
+            || Self.derivedSuffixes.contains(where: { lexicon.contains(w + $0) }) { return true }
+        return checker.completions(forPartialWordRange: NSRange(location: 0, length: (w as NSString).length),
+                                   in: w, language: "id", inSpellDocumentWithTag: 0)?.contains { completion in
             let c = completion.lowercased()
             if c == w { return true }
             guard c.hasPrefix(w) else { return false }
             let rest = String(c.dropFirst(w.count))
             return Self.derivedSuffixes.contains(rest) || rest == "-" + w
-        }
+        } ?? false
     }
 
     private func inLexicon(_ w: String) -> Bool {
@@ -183,6 +189,50 @@ final class IndonesianSpellChecker {
             }
         }
         return d[a.count][b.count]
+    }
+}
+
+/// The Indonesian word list bundled with the app: every form in the Hunspell dictionary
+/// (LGPL 3.0, see Resources/Indonesian), lowercase and sorted, so lookups are binary searches.
+/// It makes spelling and autocomplete work on Macs without an Indonesian word list of their own.
+final class IndonesianLexicon {
+    static let shared = IndonesianLexicon()
+    private let words: [String]
+
+    private init() {
+        guard let url = Bundle.main.url(forResource: "words-id", withExtension: "txt", subdirectory: "Indonesian"),
+              let text = try? String(contentsOf: url, encoding: .utf8) else {
+            words = []
+            return
+        }
+        words = text.split(separator: "\n").map(String.init)
+    }
+
+    func contains(_ word: String) -> Bool {
+        let w = word.lowercased()
+        let i = firstIndex(notBefore: w)
+        return i < words.count && words[i] == w
+    }
+
+    /// Words that start with the prefix and are longer than it, in alphabetical order.
+    func completions(of prefix: String, limit: Int) -> [String] {
+        let p = prefix.lowercased()
+        var result: [String] = []
+        var i = firstIndex(notBefore: p)
+        while i < words.count, result.count < limit, words[i].hasPrefix(p) {
+            if words[i].count > p.count { result.append(words[i]) }
+            i += 1
+        }
+        return result
+    }
+
+    private func firstIndex(notBefore word: String) -> Int {
+        var low = 0, high = words.count
+        while low < high {
+            let mid = (low + high) / 2
+            if words[mid] < word { low = mid + 1 } else { high = mid }
+        }
+        return low
     }
 }
 
