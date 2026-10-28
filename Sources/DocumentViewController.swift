@@ -47,7 +47,7 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
         addSplitViewItem(sidebarItem)
 
         let editorItem = NSSplitViewItem(viewController: editor)
-        editorItem.minimumThickness = 320
+        editorItem.minimumThickness = EditorViewController.minimumWidth
         addSplitViewItem(editorItem)
 
         coachItem = NSSplitViewItem(viewController: coachPanel)
@@ -97,7 +97,10 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
     @objc private func settingsChanged() {
         let collapse = !settings.showSidebar
         guard sidebarItem.isCollapsed != collapse else { return }
-        if !collapse { refreshOutline() }
+        if !collapse {
+            refreshOutline()
+            makeRoom(for: sidebarItem)
+        }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.2
             context.allowsImplicitAnimation = true
@@ -136,11 +139,28 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
 
     private func setCoachVisible(_ visible: Bool) {
         guard coachItem.isCollapsed == visible else { return }
+        if visible { makeRoom(for: coachItem) }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.2
             context.allowsImplicitAnimation = true
             coachItem.animator().isCollapsed = !visible
         }, completionHandler: nil)
+    }
+
+    /// Widens the window before a panel opens when the editor would otherwise get narrower
+    /// than its text column, so lines keep the same length.
+    private func makeRoom(for item: NSSplitViewItem) {
+        guard let window = view.window, item.isCollapsed else { return }
+        let panel = max(item.minimumThickness, item.viewController.view.frame.width) + splitView.dividerThickness
+        let shortfall = EditorViewController.minimumWidth - (editor.view.frame.width - panel)
+        guard shortfall > 0 else { return }
+        var frame = window.frame
+        frame.size.width += shortfall
+        if let screen = window.screen?.visibleFrame {
+            frame.size.width = min(frame.width, screen.width)
+            if frame.maxX > screen.maxX { frame.origin.x = max(screen.minX, screen.maxX - frame.width) }
+        }
+        window.setFrame(frame, display: true)
     }
 
     /// Shows or hides this window's coach; new windows follow the last choice.

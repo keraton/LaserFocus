@@ -8,7 +8,13 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     private let statusLabel = NSTextField(labelWithString: "")
     private let styler = MarkdownStyler()
     private let settings = Settings.shared
-    private let maxColumnWidth: CGFloat = 720
+    /// Lines are always this wide; the editor never gets narrower than ``minimumWidth``.
+    static let columnWidth: CGFloat = 720
+    private static let sideMargin: CGFloat = 32
+    /// The column plus its margins and room for a scroll bar that's always shown.
+    static var minimumWidth: CGFloat {
+        columnWidth + 2 * sideMargin + NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+    }
     private var wordCount = 0
     private let annotations: AnnotationStore
     /// True while the whole text is replaced programmatically, so anchors aren't collapsed.
@@ -131,6 +137,10 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
                                                name: NSView.boundsDidChangeNotification,
                                                object: scrollView.contentView)
         scrollView.contentView.postsBoundsChangedNotifications = true
+        // Panels open with an animation; keep the column centered at every step.
+        scrollView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(resized),
+                                               name: NSView.frameDidChangeNotification, object: scrollView)
     }
 
     override func viewDidAppear() {
@@ -147,6 +157,10 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
 
     @objc private func settingsChanged() {
         applySettings()
+    }
+
+    @objc private func resized() {
+        updateInsets()
     }
 
     @objc private func scrolled() {
@@ -182,7 +196,7 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
 
     private func updateInsets() {
         let width = scrollView.contentSize.width
-        let horizontal = max(32, (width - maxColumnWidth) / 2)
+        let horizontal = max(Self.sideMargin, (width - Self.columnWidth) / 2)
         let vertical = settings.typewriter ? scrollView.contentSize.height / 2 : 48
         let inset = NSSize(width: horizontal, height: vertical)
         if textView.textContainerInset != inset {
