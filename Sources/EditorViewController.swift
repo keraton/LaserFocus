@@ -19,6 +19,10 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     private let annotations: AnnotationStore
     /// True while the whole text is replaced programmatically, so anchors aren't collapsed.
     private var isReplacingText = false
+    /// Text edited since the last restyle. Styling waits until the edit is finished: changing
+    /// attributes while NSTextStorage processes an edit widens the edited range, and NSTextView
+    /// then moves the caret to its end — the end of the document for a full restyle.
+    private var unstyledRange: NSRange?
 
     /// Called after the text changes (for the outline sidebar).
     var onTextChange: (() -> Void)?
@@ -55,9 +59,19 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     var text: String {
         get { textView.string }
         set {
+            // A reload (sync, or the file changing on disk) mustn't move the caret: leave
+            // identical text alone, and otherwise keep the selection and scroll position.
+            guard newValue != textView.string else { return }
+            let selection = textView.selectedRange()
+            let scrolled = scrollView.contentView.bounds.origin
             isReplacingText = true
             textView.string = newValue
             isReplacingText = false
+            let length = (newValue as NSString).length
+            let location = min(selection.location, length)
+            textView.setSelectedRange(NSRange(location: location, length: min(selection.length, length - location)))
+            scrollView.contentView.scroll(to: scrolled)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
             restyleAll()
             updateWordCount()
             onTextChange?()
@@ -208,6 +222,7 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     // MARK: Styling
 
     private func restyleAll() {
+        unstyledRange = nil
         guard let storage = textView.textStorage else { return }
         storage.beginEditing()
         styler.style(storage, range: NSRange(location: 0, length: storage.length), settings: settings)
@@ -221,13 +236,23 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
         if !isReplacingText {
             annotations.adjust(editedRange: editedRange, delta: delta)
         }
-        let ns = textStorage.string as NSString
-        var range = ns.paragraphRange(for: editedRange)
+        unstyledRange = unstyledRange.map { NSUnionRange($0, editedRange) } ?? editedRange
+    }
+
+    /// Styles the paragraphs edited since the last call; runs once each edit is complete.
+    private func styleEditedText() {
+        guard let edited = unstyledRange, let storage = textView.textStorage else { return }
+        unstyledRange = nil
+        let ns = storage.string as NSString
+        let start = min(edited.location, ns.length)
+        var range = ns.paragraphRange(for: NSRange(location: start, length: min(edited.length, ns.length - start)))
         // Small documents are cheap to restyle entirely; also needed when a code fence changes.
         if ns.length < 30_000 || ns.substring(with: range).contains("```") || ns.substring(with: range).contains("~~~") {
             range = NSRange(location: 0, length: ns.length)
         }
-        styler.style(textStorage, range: range, settings: settings)
+        storage.beginEditing()
+        styler.style(storage, range: range, settings: settings)
+        storage.endEditing()
     }
 
     // MARK: Focus
@@ -344,6 +369,7 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     }
 
     func textDidChange(_ notification: Notification) {
+        styleEditedText()
         updateFocus()
         onTextChange?()
         NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(updateWordCount), object: nil)
