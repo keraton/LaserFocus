@@ -47,7 +47,8 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
         addSplitViewItem(sidebarItem)
 
         let editorItem = NSSplitViewItem(viewController: editor)
-        editorItem.minimumThickness = EditorViewController.minimumWidth
+        // Small enough that panels always fit beside the text; lines get shorter instead.
+        editorItem.minimumThickness = 320
         addSplitViewItem(editorItem)
 
         coachItem = NSSplitViewItem(viewController: coachPanel)
@@ -148,7 +149,8 @@ final class DocumentViewController: NSSplitViewController, NSMenuItemValidation 
     }
 
     /// Widens the window before a panel opens when the editor would otherwise get narrower
-    /// than its text column, so lines keep the same length.
+    /// than its text column, so lines keep the same length. When the screen is too small for
+    /// that, the window stops at the screen's width and the lines get shorter.
     private func makeRoom(for item: NSSplitViewItem) {
         guard let window = view.window, item.isCollapsed else { return }
         let panel = max(item.minimumThickness, item.viewController.view.frame.width) + splitView.dividerThickness

@@ -8,7 +8,7 @@ final class EditorViewController: NSViewController, NSTextStorageDelegate, NSTex
     private let statusLabel = NSTextField(labelWithString: "")
     private let styler = MarkdownStyler()
     private let settings = Settings.shared
-    /// Lines are always this wide; the editor never gets narrower than ``minimumWidth``.
+    /// Lines are this wide whenever the window has room; see ``minimumWidth``.
     static let columnWidth: CGFloat = 720
     private static let sideMargin: CGFloat = 32
     /// The column plus its margins and room for a scroll bar that's always shown.

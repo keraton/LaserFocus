@@ -27,7 +27,7 @@ final class Document: NSDocument {
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
-        window.minSize = NSSize(width: EditorViewController.minimumWidth, height: 300)
+        window.minSize = NSSize(width: 420, height: 300)
         window.contentViewController = DocumentViewController(editor: editor, annotations: annotations,
                                                               writingOutline: writingOutline, coachStore: coach)
         window.setContentSize(NSSize(width: 1240, height: 760))
